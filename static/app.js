@@ -1493,6 +1493,14 @@
   async function loadSettings() {
     S.settings = await api("/api/settings");
   }
+  // Ayarlar: soldaki bölümler arasında geçiş (son açılan bölüm hatırlanır)
+  function ayarBolumu(id) {
+    document.querySelectorAll(".ayar-nav button").forEach((b) => b.classList.toggle("active", b.dataset.ayar === id));
+    document.querySelectorAll(".ayar-bolum").forEach((s) => s.classList.toggle("active", s.dataset.ayar === id));
+    localSet("ayarBolum", id);
+  }
+  document.querySelectorAll(".ayar-nav button").forEach((b) => (b.onclick = () => ayarBolumu(b.dataset.ayar)));
+  ayarBolumu(localGet("ayarBolum") || "yz");
   $("#settingsBtn").onclick = async () => {
     await loadSettings();
     const st = S.settings, sel = $("#setVoice");

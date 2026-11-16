@@ -246,109 +246,135 @@
 <dialog id="settingsDlg">
   <form method="dialog" class="settings">
     <h3>Ayarlar</h3>
-    <fieldset class="yerel">
-      <legend>🧠 Yapay zeka (bu bilgisayarda çalışır)</legend>
-      <div id="yerelDurum" class="muted small">Durum alınıyor…</div>
-      <progress id="yerelBar" class="hidden" max="1"></progress>
-      <label>Model
-        <select id="setYerelModel"></select>
-      </label>
-      <div class="row"><button id="yerelHazirla" type="button" class="ghost small">Kur / yeniden dene</button>
-        <span id="yerelHw" class="muted small"></span></div>
-      <p class="muted small">Hiçbir şirkete bağlı değildir; ilk kurulumda program ve model bir kez indirilir, sonra internetsiz çalışır.</p>
-    </fieldset>
-    <fieldset class="keys">
-      <legend>İsteğe bağlı anahtarlar</legend>
-      <label>Gemini anahtarı (isteğe bağlı yardımcı: yerel model kurulurken ya da çalışmazsa) <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">→ buradan al</a>
-        <input id="keyGemini" type="password" autocomplete="off" placeholder="boş bırakabilirsin">
-      </label>
-      <label>ElevenLabs anahtarı (ücretli, isteğe bağlı)
-        <input id="keyEleven" type="password" autocomplete="off" placeholder="boş bırakabilirsin">
-      </label>
-      <p class="muted small">Anahtarlar sadece bu bilgisayardaki <code>.env</code> dosyasına kaydedilir. Kayıtlı olanı değiştirmek istemiyorsan alanı boş bırak.</p>
-    </fieldset>
-    <label>Hocanın beyni
-      <select id="setLlm">
-        <option value="">Otomatik: bu bilgisayardaki yapay zeka (kurulurken anahtar varsa Gemini)</option>
-        <option value="yerel">Yalnızca bu bilgisayardaki yapay zeka</option>
-        <option value="gemini">Gemini (anahtar gerekir, internet ister)</option>
-      </select>
-    </label>
-    <label class="llm-gemini">Gemini modeli <select id="setGeminiModel"></select></label>
-    <label>Önce çöz, sonra anlat (daha derin ama ilk cümle birkaç saniye gecikir)
-      <select id="setDeep">
-        <option value="auto">Otomatik (Gemini'de açık)</option>
-        <option value="on">Her zaman açık</option>
-        <option value="off">Kapalı</option>
-      </select>
-    </label>
-    <p id="llmInfo" class="muted small"></p>
-    <label>Ses kaynağı
-      <select id="setProvider">
-        <option value="edge">Microsoft Edge sesi: ÜCRETSİZ, hazır Türkçe ses (Emel / Ahmet)</option>
-        <option value="xtts">Kendi sesim (yerel klon): ÜCRETSİZ, bilgisayarımda çalışır</option>
-        <option value="piper">İnternetsiz ses (Piper): ÜCRETSİZ, tamamen bilgisayarımda</option>
-        <option value="browser">Tarayıcı sesi: ücretsiz, robotik</option>
-        <option value="elevenlabs">ElevenLabs: ücretli, kredi harcar (isteğe bağlı)</option>
-      </select>
-    </label>
-    <div class="prov prov-elevenlabs">
-      <label>Anlatıcı sesi <select id="setVoice"></select></label>
-      <label>Ses modeli
-        <select id="setTtsModel">
-          <option value="eleven_multilingual_v2">Multilingual v2 (en doğal)</option>
-          <option value="eleven_flash_v2_5">Flash v2.5 (en hızlı, yarı kredi)</option>
-          <option value="eleven_turbo_v2_5">Turbo v2.5</option>
-        </select>
-      </label>
-    </div>
-    <div class="prov prov-edge">
-      <label>Hazır ses <select id="setEdgeVoice"></select></label>
-    </div>
-    <div class="prov prov-xtts">
-      <p class="muted small">Kendi sesinden 15-30 saniyelik temiz bir kayıt gerekir (sessiz oda, normal konuşma). Önerilen metni oku ya da hazır bir ses dosyası yükle.</p>
-      <p class="small"><i>“Merhaba, ben bugün sana dersi anlatacağım. Önce konunun mantığını konuşacağız, sonra tahtada adım adım örnek çözeceğiz. Takıldığın bir yer olursa hemen sözümü kes ve sor; birlikte tekrar bakarız. Hazırsan başlayalım.”</i></p>
-      <div class="row">
-        <button type="button" id="recSample" class="ghost small">🎙 Okuyarak kaydet</button>
-        <label class="ghost small file-label">📁 Dosya yükle <input id="sampleFile" type="file" accept="audio/*" hidden></label>
-        <span id="sampleStatus" class="muted small"></span>
+    <div class="ayar-govde">
+      <nav class="ayar-nav">
+        <button type="button" data-ayar="yz" class="active">🧠 Yapay zeka</button>
+        <button type="button" data-ayar="ses">🔊 Ses</button>
+        <button type="button" data-ayar="ogretme">🎓 Öğretme</button>
+        <button type="button" data-ayar="hoca">🧑‍🏫 Hoca ve görünüm</button>
+        <button type="button" data-ayar="anahtar">🔑 Anahtarlar</button>
+      </nav>
+      <div class="ayar-icerik">
+      <section class="ayar-bolum" data-ayar="yz">
+        <h4>🧠 Yapay zeka</h4>
+        <fieldset class="yerel">
+          <legend>🧠 Yapay zeka (bu bilgisayarda çalışır)</legend>
+          <div id="yerelDurum" class="muted small">Durum alınıyor…</div>
+          <progress id="yerelBar" class="hidden" max="1"></progress>
+          <label>Model
+            <select id="setYerelModel"></select>
+          </label>
+          <div class="row"><button id="yerelHazirla" type="button" class="ghost small">Kur / yeniden dene</button>
+            <span id="yerelHw" class="muted small"></span></div>
+          <p class="muted small">Hiçbir şirkete bağlı değildir; ilk kurulumda program ve model bir kez indirilir, sonra internetsiz çalışır.</p>
+        </fieldset>
+        <label>Hocanın beyni
+          <select id="setLlm">
+            <option value="">Otomatik: bu bilgisayardaki yapay zeka (kurulurken anahtar varsa Gemini)</option>
+            <option value="yerel">Yalnızca bu bilgisayardaki yapay zeka</option>
+            <option value="gemini">Gemini (anahtar gerekir, internet ister)</option>
+          </select>
+        </label>
+        <label class="llm-gemini">Gemini modeli <select id="setGeminiModel"></select></label>
+        <label>Önce çöz, sonra anlat (daha derin ama ilk cümle birkaç saniye gecikir)
+          <select id="setDeep">
+            <option value="auto">Otomatik (Gemini'de açık)</option>
+            <option value="on">Her zaman açık</option>
+            <option value="off">Kapalı</option>
+          </select>
+        </label>
+        <p id="llmInfo" class="muted small"></p>
+      </section>
+      <section class="ayar-bolum" data-ayar="ses">
+        <h4>🔊 Ses ve konuşma</h4>
+        <label>Ses kaynağı
+          <select id="setProvider">
+            <option value="edge">Microsoft Edge sesi: ÜCRETSİZ, hazır Türkçe ses (Emel / Ahmet)</option>
+            <option value="xtts">Kendi sesim (yerel klon): ÜCRETSİZ, bilgisayarımda çalışır</option>
+            <option value="piper">İnternetsiz ses (Piper): ÜCRETSİZ, tamamen bilgisayarımda</option>
+            <option value="browser">Tarayıcı sesi: ücretsiz, robotik</option>
+            <option value="elevenlabs">ElevenLabs: ücretli, kredi harcar (isteğe bağlı)</option>
+          </select>
+        </label>
+        <div class="prov prov-elevenlabs">
+          <label>Anlatıcı sesi <select id="setVoice"></select></label>
+          <label>Ses modeli
+            <select id="setTtsModel">
+              <option value="eleven_multilingual_v2">Multilingual v2 (en doğal)</option>
+              <option value="eleven_flash_v2_5">Flash v2.5 (en hızlı, yarı kredi)</option>
+              <option value="eleven_turbo_v2_5">Turbo v2.5</option>
+            </select>
+          </label>
+        </div>
+        <div class="prov prov-edge">
+          <label>Hazır ses <select id="setEdgeVoice"></select></label>
+        </div>
+        <div class="prov prov-xtts">
+          <p class="muted small">Kendi sesinden 15-30 saniyelik temiz bir kayıt gerekir (sessiz oda, normal konuşma). Önerilen metni oku ya da hazır bir ses dosyası yükle.</p>
+          <p class="small"><i>“Merhaba, ben bugün sana dersi anlatacağım. Önce konunun mantığını konuşacağız, sonra tahtada adım adım örnek çözeceğiz. Takıldığın bir yer olursa hemen sözümü kes ve sor; birlikte tekrar bakarız. Hazırsan başlayalım.”</i></p>
+          <div class="row">
+            <button type="button" id="recSample" class="ghost small">🎙 Okuyarak kaydet</button>
+            <label class="ghost small file-label">📁 Dosya yükle <input id="sampleFile" type="file" accept="audio/*" hidden></label>
+            <span id="sampleStatus" class="muted small"></span>
+          </div>
+        </div>
+        <button type="button" id="previewVoice" class="ghost small">Sesi dinle</button>
+        <label>Konuşmayı yazıya çevirme
+          <select id="setStt">
+            <option value="whisper">Whisper: ÜCRETSİZ, bilgisayarımda çalışır</option>
+            <option value="elevenlabs">ElevenLabs Scribe: ücretli (isteğe bağlı)</option>
+          </select>
+        </label>
+        <label>Konuşmalı derste konuşma tanıma
+          <select id="setConvStt">
+            <option value="browser">Tarayıcı: anında, ücretsiz (önerilen)</option>
+            <option value="whisper">Whisper: bilgisayarımda, internetsiz</option>
+          </select>
+        </label>
+        <label>Konuşmalı modda mikrofon hassasiyeti
+          <input id="setSens" type="range" min="0.6" max="1.6" step="0.1" value="1">
+        </label>
+      </section>
+      <section class="ayar-bolum" data-ayar="ogretme">
+        <h4>🎓 Öğretme</h4>
+        <label>Anlatım seviyesi
+          <select id="setLevel"><option value="basit">Basit (sıfırdan)</option><option value="normal">Normal</option><option value="ileri">İleri (hızlı tekrar)</option></select>
+        </label>
+        <label class="check"><input id="setWeb" type="checkbox"> Gerekirse internette araştırabilsin (daha yavaş)</label>
+        <label>Öğretme tarzı
+          <select id="setTarz"><option value="anlat">Anlat (önce anlatır)</option><option value="sokratik">Sokratik (önce bana sor, cevaba kendim ulaşayım)</option></select>
+        </label>
+        <label class="check"><input id="setHesap" type="checkbox"> 🧮 Sayısal mühendislik sorularında gerçek hesap araçlarını kullan (EOQ, MRP, doğrusal programlama, kuyruk…)</label>
+        <label class="check"><input id="setKendiCalisma" type="checkbox"> Bilgisayar boşken hoca kaynaklardan kendi kendine soru hazırlayıp doğrulasın</label>
+        <div class="row"><button type="button" id="profilSifirla" class="ghost small">Öğrenci profilimi sıfırla</button> <span class="muted small">Hocanın senin tercihlerinden öğrendikleri silinir.</span></div>
+        <label class="check"><input id="setOtoPaket" type="checkbox"> Yeni not eklenince özet, konu anlatımı ve deneme sınavlarını kendiliğinden güncelle</label>
+      </section>
+      <section class="ayar-bolum" data-ayar="hoca">
+        <h4>🧑‍🏫 Hoca ve görünüm</h4>
+        <label class="check"><input id="set3d" type="checkbox"> 3B sınıf ve hoca (kapalıysa 2B çizim; eski bilgisayarda kapat)</label>
+        <div class="row">
+          <label class="ghost small file-label" title="Tripo vb. ile yapılmış, iskeletli (rig) GLB modeli">🧑‍🏫 Hoca modeli (GLB) yükle
+            <input id="glbInput" type="file" accept=".glb,model/gltf-binary" hidden></label>
+          <button type="button" id="glbFlip" class="ghost small" title="Model sırtı dönük duruyorsa">↻ 180° çevir</button>
+          <button type="button" id="glbReset" class="ghost small">Varsayılan hoca</button>
+          <span id="glbStatus" class="muted small"></span>
+        </div>
+      </section>
+      <section class="ayar-bolum" data-ayar="anahtar">
+        <h4>🔑 İsteğe bağlı anahtarlar</h4>
+        <fieldset class="keys">
+          <legend>İsteğe bağlı anahtarlar</legend>
+          <label>Gemini anahtarı (isteğe bağlı yardımcı: yerel model kurulurken ya da çalışmazsa) <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">→ buradan al</a>
+            <input id="keyGemini" type="password" autocomplete="off" placeholder="boş bırakabilirsin">
+          </label>
+          <label>ElevenLabs anahtarı (ücretli, isteğe bağlı)
+            <input id="keyEleven" type="password" autocomplete="off" placeholder="boş bırakabilirsin">
+          </label>
+          <p class="muted small">Anahtarlar sadece bu bilgisayardaki <code>.env</code> dosyasına kaydedilir. Kayıtlı olanı değiştirmek istemiyorsan alanı boş bırak.</p>
+        </fieldset>
+      </section>
       </div>
     </div>
-    <button type="button" id="previewVoice" class="ghost small">Sesi dinle</button>
-    <label>Konuşmayı yazıya çevirme
-      <select id="setStt">
-        <option value="whisper">Whisper: ÜCRETSİZ, bilgisayarımda çalışır</option>
-        <option value="elevenlabs">ElevenLabs Scribe: ücretli (isteğe bağlı)</option>
-      </select>
-    </label>
-    <label>Anlatım seviyesi
-      <select id="setLevel"><option value="basit">Basit (sıfırdan)</option><option value="normal">Normal</option><option value="ileri">İleri (hızlı tekrar)</option></select>
-    </label>
-    <label class="check"><input id="set3d" type="checkbox"> 3B sınıf ve hoca (kapalıysa 2B çizim; eski bilgisayarda kapat)</label>
-    <div class="row">
-      <label class="ghost small file-label" title="Tripo vb. ile yapılmış, iskeletli (rig) GLB modeli">🧑‍🏫 Hoca modeli (GLB) yükle
-        <input id="glbInput" type="file" accept=".glb,model/gltf-binary" hidden></label>
-      <button type="button" id="glbFlip" class="ghost small" title="Model sırtı dönük duruyorsa">↻ 180° çevir</button>
-      <button type="button" id="glbReset" class="ghost small">Varsayılan hoca</button>
-      <span id="glbStatus" class="muted small"></span>
-    </div>
-    <label class="check"><input id="setWeb" type="checkbox"> Gerekirse internette araştırabilsin (daha yavaş)</label>
-    <label>Öğretme tarzı
-      <select id="setTarz"><option value="anlat">Anlat (önce anlatır)</option><option value="sokratik">Sokratik (önce bana sor, cevaba kendim ulaşayım)</option></select>
-    </label>
-    <label class="check"><input id="setHesap" type="checkbox"> 🧮 Sayısal mühendislik sorularında gerçek hesap araçlarını kullan (EOQ, MRP, doğrusal programlama, kuyruk…)</label>
-    <label class="check"><input id="setKendiCalisma" type="checkbox"> Bilgisayar boşken hoca kaynaklardan kendi kendine soru hazırlayıp doğrulasın</label>
-    <div class="row"><button type="button" id="profilSifirla" class="ghost small">Öğrenci profilimi sıfırla</button> <span class="muted small">Hocanın senin tercihlerinden öğrendikleri silinir.</span></div>
-    <label class="check"><input id="setOtoPaket" type="checkbox"> Yeni not eklenince özet, konu anlatımı ve deneme sınavlarını kendiliğinden güncelle</label>
-    <label>Konuşmalı derste konuşma tanıma
-      <select id="setConvStt">
-        <option value="browser">Tarayıcı: anında, ücretsiz (önerilen)</option>
-        <option value="whisper">Whisper: bilgisayarımda, internetsiz</option>
-      </select>
-    </label>
-    <label>Konuşmalı modda mikrofon hassasiyeti
-      <input id="setSens" type="range" min="0.6" max="1.6" step="0.1" value="1">
-    </label>
     <menu><button value="cancel" class="ghost">Kapat</button><button id="saveSettings" value="ok" class="primary">Kaydet</button></menu>
   </form>
 </dialog>
