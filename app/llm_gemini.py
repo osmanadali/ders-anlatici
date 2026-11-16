@@ -1,6 +1,6 @@
 """Google Gemini (ücretsiz kota) ile hoca.
 
-Uygulamanın geri kalanı Claude biçimindeki mesajlarla çalışır; bu modül onları Gemini biçimine
+Uygulamanın geri kalanı ortak (blok) biçimdeki mesajlarla çalışır; bu modül onları Gemini biçimine
 çevirir, aynı adım protokolünü (say + board satırları) aynı talimatlarla kullanır.
 """
 from __future__ import annotations
@@ -112,7 +112,7 @@ def _parts(content) -> list:
 
 
 def to_contents(messages: list[dict]) -> list:
-    """Claude biçimindeki geçmişi Gemini 'contents' listesine çevirir (aynı rol art arda gelirse birleştirir)."""
+    """Ortak biçimdeki geçmişi Gemini 'contents' listesine çevirir (aynı rol art arda gelirse birleştirir)."""
     from google.genai import types
 
     out: list = []

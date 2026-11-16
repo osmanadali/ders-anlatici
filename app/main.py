@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, curriculum, hazir, llm, notes, prompts, store, voice
+from . import auth, curriculum, hazir, llm, notes, prompts, store, voice, yerel
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -150,6 +150,34 @@ async def _warm_up():
         import threading
 
         threading.Thread(target=voice.warm_whisper, daemon=True).start()
+    # Yerel yapay zeka: ilk açılışta programı ve modeli indirir, sonraki açılışlarda yalnızca başlatır.
+    if os.getenv("DERS_ON_YUKLEME", "1") != "0" and load_settings().get("llm_provider") != "gemini":
+        yerel.baslat_arka_planda()
+
+
+@app.on_event("shutdown")
+async def _shutdown():
+    yerel.stop_server()  # yalnızca bizim başlattığımız yerel yapay zeka sunucusu kapanır
+
+
+# ---------------------------------------------------------------- yerel yapay zeka (kurulum durumu)
+@app.get("/api/yerel")
+async def yerel_durum():
+    return yerel.durum()
+
+
+@app.post("/api/yerel/hazirla")
+async def yerel_hazirla(body: dict | None = None):
+    """Kurulumu başlatır/yeniden dener. {"model": "gemma4:e4b"} ile başka model seçilebilir ("" = otomatik)."""
+    if body and "model" in body:
+        m = str(body["model"] or "")
+        if m and m not in yerel.MODELS:
+            raise HTTPException(400, "Bilinmeyen model")
+        save_settings({"yerel_model": m})
+        if yerel.STATE.get("state") == "hazir" and m != yerel.STATE.get("model"):
+            yerel.STATE["state"] = "bilinmiyor"
+    yerel.baslat_arka_planda()
+    return yerel.durum()
 
 
 LAST_PING = [0.0]  # uygulama penceresinden son "buradayım" zamanı (başlatıcı pencere kapanınca sunucuyu kapatır)
@@ -178,23 +206,22 @@ async def version():
 @app.get("/api/status")
 async def status():
     return {"whisper": voice.WHISPER_STATE["state"], "whisper_detail": voice.WHISPER_STATE.get("detail", ""),
-            "brain": llm.provider()}
+            "brain": llm.provider(), "brain_label": llm.brain_label(), "yerel": yerel.durum()}
 
 
 @app.get("/api/keys")
 async def keys_status():
     """Hangi anahtarların girildiğini söyler (anahtarın kendisini asla göndermez)."""
-    from .config import anthropic_key, elevenlabs_key, gemini_key
+    from .config import elevenlabs_key, gemini_key
 
     def mask(k: str) -> str:
         return (k[:4] + "…" + k[-4:]) if len(k) > 12 else ("girildi" if k else "")
 
-    return {"gemini": mask(gemini_key()), "anthropic": mask(anthropic_key()), "elevenlabs": mask(elevenlabs_key())}
+    return {"gemini": mask(gemini_key()), "elevenlabs": mask(elevenlabs_key())}
 
 
 class KeysBody(BaseModel):
     gemini: str | None = None
-    anthropic: str | None = None
     elevenlabs: str | None = None
 
 
@@ -211,9 +238,10 @@ async def keys_save(body: KeysBody, request: Request):
 
 @app.get("/api/llm-options")
 async def llm_options():
-    from .config import anthropic_key, gemini_key
+    from .config import gemini_key
 
-    out = {"claude": bool(anthropic_key()), "gemini": bool(gemini_key()), "active": llm.provider(), "gemini_models": []}
+    out = {"gemini": bool(gemini_key()), "active": llm.provider(), "brain": llm.brain_label(), "gemini_models": [],
+           "yerel": yerel.durum()}
     if gemini_key():
         try:
             out["gemini_models"] = await llm.llm_gemini.list_models()
@@ -365,7 +393,7 @@ async def get_formula_sheet(course_id: str):
 async def make_formula_sheet(course_id: str, body: FocusBody):
     course = notes.get_course(course_id)
     _require_material(course)
-    nt = notes.notes_context(course, body.focus)
+    nt = notes.notes_context(course, body.focus, limit=llm.notes_limit())
     try:
         sheet = await llm.formula_sheet(course, nt.text, nt.full, body.focus)
     except llm.TutorError as e:
@@ -399,7 +427,7 @@ async def make_schedule(course_id: str, body: ScheduleBody):
     days_left = (exam - today).days
     if days_left < 0:
         raise HTTPException(400, "Sınav tarihi geçmiş")
-    nt = notes.notes_context(course, body.scope)
+    nt = notes.notes_context(course, body.scope, limit=llm.notes_limit())
     try:
         plan = await llm.study_plan(
             course, nt.text, nt.full,
@@ -468,7 +496,7 @@ async def page_image(course_id: str, doc_id: str, page: int):
 
 
 def _schedule_ocr(course_id: str, doc: dict) -> None:
-    """Metin katmanı olmayan sayfaları (taranmış PDF, fotoğraf) arka planda Claude ile okur."""
+    """Metin katmanı olmayan sayfaları (taranmış PDF, fotoğraf) arka planda yapay zeka ile okur."""
     todo = [p["n"] for p in doc["pages"] if p.get("needs_ocr")]
     if not todo:
         return
@@ -655,7 +683,7 @@ async def ask(
     content.append({"type": "text", "text": user_text or "Ekteki görseli/dosyayı bana anlat."})
     user_msg = {"role": "user", "content": content}
 
-    nt = notes.notes_context(course, user_text, focus)
+    nt = notes.notes_context(course, user_text, focus, limit=llm.notes_limit())
     system = llm.build_system(
         course, nt.text, nt.full, store.memory_summary(course_id or None), settings.get("level", "normal"),
         conversation=(style == "konusma"),
@@ -674,7 +702,7 @@ async def ask(
         prev_say = ""
         send = messages
         try:
-            brain = "Gemini" if llm.provider() == "gemini" else "Claude"
+            brain = llm.brain_label()
             if deep:
                 # Önce gerekçeli tam çözüm (öğrenciye gösterilmez), sonra hoca bunu izleyerek anlatır.
                 yield _sse({"type": "status", "message": "Soruyu önce kendi kendime çözüyorum…"})
@@ -753,25 +781,32 @@ async def curriculum_import(body: ImportBody):
         raise HTTPException(404, "Program bulunamadı")
 
 
-FIRST_STEP_TIMEOUT = 120  # sn: ilk adım bu sürede gelmezse kullanıcıya açık hata
+FIRST_STEP_TIMEOUT = 120  # sn: ilk adım bu sürede gelmezse kullanıcıya açık hata (Gemini)
 NEXT_STEP_TIMEOUT = 90
 DEEP_TIMEOUT = 90
+# Yerel modelde ilk istek notları okumakla (işlemcide yavaş) başlar; sonraki istekler önbellekten hızlanır.
+YEREL_FIRST_STEP_TIMEOUT = 420
+YEREL_NEXT_STEP_TIMEOUT = 180
 
 
 async def _with_timeouts(agen, brain: str):
     """Model takılırsa sonsuza dek beklemek yerine anlaşılır bir hata verir."""
     first = True
     it = agen.__aiter__()
+    local = llm.provider() == "yerel"
+    t_first = YEREL_FIRST_STEP_TIMEOUT if local else FIRST_STEP_TIMEOUT
+    t_next = YEREL_NEXT_STEP_TIMEOUT if local else NEXT_STEP_TIMEOUT
     while True:
         try:
-            item = await asyncio.wait_for(it.__anext__(), FIRST_STEP_TIMEOUT if first else NEXT_STEP_TIMEOUT)
+            item = await asyncio.wait_for(it.__anext__(), t_first if first else t_next)
         except StopAsyncIteration:
             return
         except asyncio.TimeoutError:
             await agen.aclose()
             raise llm.TutorError(
-                f"{brain} {FIRST_STEP_TIMEOUT if first else NEXT_STEP_TIMEOUT} saniyedir cevap vermedi. "
-                "İnternet bağlantını kontrol edip tekrar dene; sürerse Ayarlar'dan başka bir model seç."
+                f"{brain} {t_first if first else t_next} saniyedir cevap vermedi. "
+                + ("Bilgisayar bu model için yavaş kalıyor olabilir: Ayarlar → Yapay zeka'dan daha küçük bir model seç."
+                   if local else "İnternet bağlantını kontrol edip tekrar dene; sürerse Ayarlar'dan başka bir model seç.")
             )
         if "say" in item:
             first = False
@@ -784,7 +819,7 @@ def _wants_deep(settings: dict, mode: str, style: str, text: str, attachments: l
     if choice == "off" or mode == "lecture":
         return False
     if choice == "auto" and llm.provider() != "gemini":
-        return False  # Claude zaten derin düşünüyor
+        return False  # yerel modelde hız için kapalı (Ayarlar'dan açılabilir)
     if attachments:
         return True
     if style == "konusma" and len(text) < 60:
@@ -811,7 +846,7 @@ def _require_material(course: dict | None) -> None:
 async def lecture_plan(body: PlanBody):
     course = notes.get_course(body.course_id)
     _require_material(course)
-    nt = notes.notes_context(course, body.focus)
+    nt = notes.notes_context(course, body.focus, limit=llm.notes_limit())
     try:
         plan = await llm.lecture_plan(course, nt.text, nt.full, body.focus)
     except llm.TutorError as e:
@@ -831,7 +866,7 @@ class QuizBody(BaseModel):
 async def quiz_generate(body: QuizBody):
     course = notes.get_course(body.course_id)
     _require_material(course)
-    nt = notes.notes_context(course, body.topic)
+    nt = notes.notes_context(course, body.topic, limit=llm.notes_limit())
     try:
         quiz = await llm.make_quiz(
             course, nt.text, nt.full, max(1, min(body.count, 20)), body.difficulty, body.topic,

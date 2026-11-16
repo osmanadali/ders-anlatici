@@ -23,11 +23,7 @@ FULL_NOTES_CHAR_LIMIT = int(os.getenv("FULL_NOTES_CHAR_LIMIT", "200000"))  # ~55
 
 # ---------------------------------------------------------------- API anahtarları
 # Anahtarlar her kullanımda ortamdan okunur; Ayarlar'dan girilince yeniden başlatma gerekmez.
-KEY_NAMES = {"gemini": "GEMINI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY"}
-
-
-def anthropic_key() -> str:
-    return os.getenv("ANTHROPIC_API_KEY", "").strip()
+KEY_NAMES = {"gemini": "GEMINI_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY"}  # ikisi de isteğe bağlı
 
 
 def gemini_key() -> str:
@@ -69,12 +65,12 @@ DEFAULTS = {
     "voice_id": os.getenv("VOICE_ID", "zu3iuxxlZoTwzmAUvpNF"),  # Osman Adalı (TR klon)
     "voice_name": "Osman Adalı",
     "tts_model": os.getenv("TTS_MODEL", "eleven_multilingual_v2"),
-    "llm_provider": os.getenv("LLM_PROVIDER", ""),  # "" = otomatik (hangi anahtar varsa) | claude | gemini
+    "llm_provider": os.getenv("LLM_PROVIDER", ""),  # "" = otomatik (yerel öncelikli) | yerel | gemini
+    "yerel_model": os.getenv("YEREL_MODEL", ""),  # boş = donanıma göre otomatik (gemma4:e2b … gemma4:26b)
+    "yerel_ctx": int(os.getenv("YEREL_CTX", "0")),  # 0 = modele göre otomatik
+    "yerel_sicaklik": 0.6,
     "gemini_model": os.getenv("GEMINI_MODEL", ""),  # boş = anahtarın erişebildiği en uygun Flash modeli otomatik
     "deep_solve": os.getenv("DEEP_SOLVE", "auto"),  # auto (Gemini'de açık) | on | off
-    "claude_fallback": True,  # Gemini kotası dolarsa (Claude anahtarı varsa) Claude'a geç
-    "claude_model": os.getenv("CLAUDE_MODEL", "claude-opus-5-5"),
-    "effort": os.getenv("EFFORT", "medium"),
     "level": "normal",  # basit | normal | ileri
     "tts_enabled": True,  # eski ayar; tts_provider="browser" ile aynı anlamda
     "tts_provider": os.getenv("TTS_PROVIDER", "edge"),  # edge (ücretsiz) | xtts (ücretsiz klon) | browser | elevenlabs (ücretli, isteğe bağlı)
@@ -95,6 +91,8 @@ def load_settings() -> dict:
             s.update(json.loads(_SETTINGS_FILE.read_text("utf-8")))
         except (OSError, json.JSONDecodeError):
             pass
+    if s.get("llm_provider") not in ("", "yerel", "gemini"):
+        s["llm_provider"] = ""  # eski sürümlerdeki "claude" seçimi: artık yok
     if s.get("tts_enabled") is False:
         s["tts_provider"] = "browser"
     if not s.get("_ses_v2"):

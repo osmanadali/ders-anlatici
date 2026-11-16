@@ -655,6 +655,38 @@
     area.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // ================================================================ yerel yapay zeka durumu
+  let yerelTimer = null;
+  const GB = { "gemma4:26b": 18.7, "gemma4:12b": 8, "gemma4:e4b": 6.6, "gemma4:e2b": 4.6 };
+  async function refreshYerel(fillSelect = false) {
+    let y;
+    try { y = await api("/api/yerel"); } catch { return null; }
+    const chip = $("#yerelChip"), pct = y.progress != null ? ` %${Math.round(y.progress * 100)}` : "";
+    const txt = { hazir: "✔ " + y.detail, kuruluyor: "⏳ " + y.detail + pct, hata: "⚠ " + y.detail,
+      bilinmiyor: "Henüz başlatılmadı" }[y.state] || y.detail;
+    $("#yerelDurum").textContent = txt;
+    $("#yerelBar").classList.toggle("hidden", y.state !== "kuruluyor" || y.progress == null);
+    if (y.progress != null) $("#yerelBar").value = y.progress;
+    chip.classList.toggle("hidden", y.state === "hazir" || y.state === "bilinmiyor");
+    chip.textContent = y.state === "hata" ? "⚠ Yapay zeka" : `🧠 Kuruluyor${pct}`;
+    chip.title = txt;
+    if (y.hw) $("#yerelHw").textContent = `Bilgisayar: ${y.hw.ram_gb} GB bellek` + (y.hw.vram_gb ? `, ${y.hw.vram_gb} GB ekran kartı` : ", ekran kartı yok") + `, ${y.hw.disk_gb} GB boş disk`;
+    if (fillSelect) {
+      const cur = S.settings.yerel_model || "";
+      $("#setYerelModel").innerHTML = `<option value="">Otomatik (bu bilgisayara göre${y.model && !cur ? ": " + y.model : ""})</option>` +
+        y.secenekler.map((m) => `<option value="${m}">${m} (${GB[m] || "?"} GB)</option>`).join("");
+      $("#setYerelModel").value = cur;
+    }
+    clearTimeout(yerelTimer);
+    if (y.state === "kuruluyor") yerelTimer = setTimeout(() => refreshYerel(), 3000);
+    return y;
+  }
+  $("#yerelChip").onclick = () => $("#settingsBtn").click();
+  $("#yerelHazirla").onclick = async () => {
+    try { await postJSON("/api/yerel/hazirla", { model: $("#setYerelModel").value }); } catch (e) { return toast(e.message); }
+    refreshYerel();
+  };
+
   // ================================================================ müfredattan ders ekle
   let programs = [];
   function renderCurriculum() {
@@ -1003,17 +1035,14 @@
     sel.innerHTML = `<option value="${st.voice_id}">${st.voice_name || st.voice_id}</option>`;
     $("#setTtsModel").value = st.tts_model;
     $("#setLevel").value = st.level;
-    $("#setEffort").value = st.effort;
     $("#setProvider").value = st.tts_provider || "edge";
     $("#setDeep").value = st.deep_solve || "auto";
     api("/api/llm-options").then((o) => {
-      $("#setLlm").value = o.active;
+      $("#setLlm").value = st.llm_provider || "";
       $("#setGeminiModel").innerHTML = `<option value="">Otomatik (önerilen)${o.gemini_auto ? ": " + o.gemini_auto : ""}</option>` +
         o.gemini_models.map((m) => `<option>${m}</option>`).join("");
       $("#setGeminiModel").value = o.gemini_models.includes(st.gemini_model) ? st.gemini_model : "";
-      const miss = [!o.gemini && "GEMINI_API_KEY", !o.claude && "ANTHROPIC_API_KEY"].filter(Boolean);
-      $("#llmInfo").textContent = (o.gemini_error ? "Gemini: " + o.gemini_error + " " : "") +
-        (miss.length ? `.env dosyasında eksik: ${miss.join(", ")} (o seçenek çalışmaz).` : "");
+      $("#llmInfo").textContent = `Şu an anlatan: ${o.brain}.` + (o.gemini_error ? " Gemini: " + o.gemini_error : "");
     }).catch(() => {});
     $("#setStt").value = st.stt_provider || "whisper";
     $(".settings").dataset.prov = $("#setProvider").value;
@@ -1025,10 +1054,10 @@
     $("#setWeb").checked = !!st.web_search;
     $("#set3d").checked = localGet("hoca3d") !== "0";
     $("#setConvStt").value = localGet("convStt") === "whisper" || !window.BrowserConversation?.available() ? "whisper" : "browser";
-    ["keyGemini", "keyAnthropic", "keyEleven"].forEach((id) => ($("#" + id).value = ""));
+    ["keyGemini", "keyEleven"].forEach((id) => ($("#" + id).value = ""));
+    refreshYerel(true);
     api("/api/keys").then((k) => {
-      $("#keyGemini").placeholder = k.gemini ? `kayıtlı: ${k.gemini}` : "AIza… ile başlar";
-      $("#keyAnthropic").placeholder = k.anthropic ? `kayıtlı: ${k.anthropic}` : "sk-ant-… ile başlar";
+      $("#keyGemini").placeholder = k.gemini ? `kayıtlı: ${k.gemini}` : "boş bırakabilirsin";
       $("#keyEleven").placeholder = k.elevenlabs ? `kayıtlı: ${k.elevenlabs}` : "boş bırakabilirsin";
     }).catch(() => {});
     $("#setSens").value = localGet("sens") || "1";
@@ -1095,12 +1124,14 @@
   $("#saveSettings").onclick = async () => {
     const keys = {};
     if ($("#keyGemini").value.trim()) keys.gemini = $("#keyGemini").value.trim();
-    if ($("#keyAnthropic").value.trim()) keys.anthropic = $("#keyAnthropic").value.trim();
     if ($("#keyEleven").value.trim()) keys.elevenlabs = $("#keyEleven").value.trim();
     if (Object.keys(keys).length) {
       try { await postJSON("/api/keys", keys); toast("Anahtarlar kaydedildi."); }
       catch (e) { toast("Anahtar kaydedilemedi: " + e.message); }
-      if (keys.gemini && !keys.anthropic) $("#setLlm").value = "gemini";
+    }
+    const yModel = $("#setYerelModel").value;
+    if (yModel !== (S.settings.yerel_model || "")) {
+      postJSON("/api/yerel/hazirla", { model: yModel }).then(() => refreshYerel()).catch((e) => toast(e.message));
     }
     const o = $("#setVoice").selectedOptions[0];
     S.settings = await postJSON("/api/settings", {
@@ -1108,7 +1139,6 @@
       voice_name: o?.dataset.name || o?.textContent || S.settings.voice_name,
       tts_model: $("#setTtsModel").value,
       level: $("#setLevel").value,
-      effort: $("#setEffort").value,
       tts_provider: $("#setProvider").value,
       llm_provider: $("#setLlm").value,
       gemini_model: $("#setGeminiModel").value,
@@ -1192,13 +1222,10 @@
       localSet("seenVersion", v.sha);
     }
   }).catch(() => {});
-  // İlk açılış: hiç beyin anahtarı yoksa Ayarlar'ı aç
-  api("/api/keys").then((k) => {
-    if (!k.gemini && !k.anthropic) {
-      toast("Hoşgeldin! Başlamak için ücretsiz Gemini anahtarını Ayarlar'a gir.", 7000);
-      $("#settingsBtn").click();
-    }
-  }).catch(() => {});
+  // Yerel yapay zeka: ilk açılışta kendiliğinden kurulur; durum üst çubukta görünür
+  refreshYerel().then((y) => {
+    if (y && y.state === "kuruluyor") toast("Yapay zeka bu bilgisayara ilk kez kuruluyor (bir kerelik indirme). Bitince hoca kendiliğinden çalışır.", 9000);
+  });
   if (localGet("hoca3d") !== "0" && !matchMedia("(prefers-reduced-motion: reduce)").matches) enable3D(true);
   loadCourses().catch((e) => toast("Sunucuya bağlanılamadı: " + e.message));
 })();

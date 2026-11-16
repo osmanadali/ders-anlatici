@@ -38,7 +38,7 @@ def new_session(course_id: str | None, title: str = "") -> dict:
         "title": title or "Yeni anlatım",
         "created": time.time(),
         "updated": time.time(),
-        "messages": [],  # Claude API geçmişi
+        "messages": [],  # yapay zeka konuşma geçmişi
         "timeline": [],  # tekrar izleme için: kullanıcı mesajları + anlatım adımları
         "next_step": 0,
     }

@@ -173,7 +173,7 @@ def _split_pdf(pdf_path: Path, out_dir: Path) -> list[dict]:
 
     pages = []
     for i, t in enumerate(texts):
-        # Metin katmanı olmayan (taranmış) sayfalar sonradan Claude ile okunur.
+        # Metin katmanı olmayan (taranmış) sayfalar sonradan yapay zeka ile okunur.
         pages.append({"n": i + 1, "text": t, "needs_ocr": len(t) < 40})
     return pages
 
@@ -227,7 +227,8 @@ def _tokens(s: str) -> set[str]:
     return {w for w in re.findall(r"\w{3,}", s.lower())}
 
 
-def notes_context(course: dict | None, query: str = "", focus: tuple[str, int] | None = None) -> NotesContext:
+def notes_context(course: dict | None, query: str = "", focus: tuple[str, int] | None = None,
+                  limit: int | None = None) -> NotesContext:
     """Ders notlarını model bağlamı için metne çevirir.
 
     Notlar küçükse tamamı (önbelleğe alınır), büyükse sorguya en çok benzeyen sayfalar.
@@ -236,7 +237,8 @@ def notes_context(course: dict | None, query: str = "", focus: tuple[str, int] |
         return NotesContext("", True)
     blocks = [(doc, p) for doc in course["docs"] for p in doc["pages"] if p.get("text")]
     total = sum(len(p["text"]) for _, p in blocks)
-    if total <= FULL_NOTES_CHAR_LIMIT:
+    limit = limit or FULL_NOTES_CHAR_LIMIT
+    if total <= limit:
         return NotesContext("\n".join(_page_block(d, p) for d, p in blocks), True)
 
     q = _tokens(query)
@@ -248,7 +250,7 @@ def notes_context(course: dict | None, query: str = "", focus: tuple[str, int] |
         scored.append((score, doc, p))
     scored.sort(key=lambda x: -x[0])
     chosen, size = [], 0
-    budget = FULL_NOTES_CHAR_LIMIT // 3
+    budget = limit if limit < FULL_NOTES_CHAR_LIMIT else limit // 3
     for _, doc, p in scored:
         if chosen and size + len(p["text"]) > budget:
             continue

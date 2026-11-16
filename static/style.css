@@ -286,3 +286,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .md-table { border-collapse: collapse; margin: 8px 0; font-size: .92em; width: 100%; display: block; overflow-x: auto; }
 .md-table th, .md-table td { border: 1px solid var(--border, #c9d3cd); padding: 4px 8px; text-align: left; vertical-align: top; }
 .md-table th { background: var(--panel); }
+
+/* yerel yapay zeka */
+fieldset.yerel progress { width: 100%; height: 10px; accent-color: var(--accent); margin: 6px 0; }
+#yerelChip { white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }

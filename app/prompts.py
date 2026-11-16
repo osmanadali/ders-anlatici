@@ -1,4 +1,4 @@
-"""Claude'a verilen talimatlar. Asıl sihir burada: model cevabı tek seferde yazmıyor,
+"""Hocaya (yapay zekaya) verilen talimatlar. Asıl sihir burada: model cevabı tek seferde yazmıyor,
 'konuş + tahtaya yaz' adımlarına bölüyor; arayüz her adımı sesle eşzamanlı canlandırıyor."""
 
 import json

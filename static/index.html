@@ -27,6 +27,7 @@
   <button id="newCourseBtn" class="ghost" title="Yeni ders">+ Ders</button>
   <button id="curriculumBtn" class="ghost" title="Bölüm müfredatından dersleri ekle">📚 Müfredat</button>
   <div class="spacer"></div>
+  <button id="yerelChip" class="ghost small hidden" title="Yerel yapay zeka kurulumu (Ayarlar)"></button>
   <button id="convBtn" class="ghost" title="Mikrofon sürekli açık: konuşarak ders, istediğin an sözünü kes">🎧 Konuşmalı ders</button>
   <span id="micMeter" class="mic-meter hidden"><i></i></span>
   <button id="newSessionBtn" class="ghost" title="Yeni anlatım başlat">Yeni anlatım</button>
@@ -176,13 +177,21 @@
 <dialog id="settingsDlg">
   <form method="dialog" class="settings">
     <h3>Ayarlar</h3>
-    <fieldset class="keys">
-      <legend>API anahtarları</legend>
-      <label>Gemini anahtarı (ÜCRETSİZ) <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">→ buradan al</a>
-        <input id="keyGemini" type="password" autocomplete="off" placeholder="AIza… ile başlar">
+    <fieldset class="yerel">
+      <legend>🧠 Yapay zeka (bu bilgisayarda çalışır)</legend>
+      <div id="yerelDurum" class="muted small">Durum alınıyor…</div>
+      <progress id="yerelBar" class="hidden" max="1"></progress>
+      <label>Model
+        <select id="setYerelModel"></select>
       </label>
-      <label>Claude anahtarı (ücretli, isteğe bağlı) <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">→ buradan al</a>
-        <input id="keyAnthropic" type="password" autocomplete="off" placeholder="sk-ant-… ile başlar">
+      <div class="row"><button id="yerelHazirla" type="button" class="ghost small">Kur / yeniden dene</button>
+        <span id="yerelHw" class="muted small"></span></div>
+      <p class="muted small">Hiçbir şirkete bağlı değildir; ilk kurulumda program ve model bir kez indirilir, sonra internetsiz çalışır.</p>
+    </fieldset>
+    <fieldset class="keys">
+      <legend>İsteğe bağlı anahtarlar</legend>
+      <label>Gemini anahtarı (isteğe bağlı yardımcı: yerel model kurulurken ya da çalışmazsa) <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">→ buradan al</a>
+        <input id="keyGemini" type="password" autocomplete="off" placeholder="boş bırakabilirsin">
       </label>
       <label>ElevenLabs anahtarı (ücretli, isteğe bağlı)
         <input id="keyEleven" type="password" autocomplete="off" placeholder="boş bırakabilirsin">
@@ -191,8 +200,9 @@
     </fieldset>
     <label>Hocanın beyni
       <select id="setLlm">
-        <option value="gemini">Gemini: ÜCRETSİZ (günlük kotalı)</option>
-        <option value="claude">Claude: ücretli, en derin anlatım</option>
+        <option value="">Otomatik: bu bilgisayardaki yapay zeka (kurulurken anahtar varsa Gemini)</option>
+        <option value="yerel">Yalnızca bu bilgisayardaki yapay zeka</option>
+        <option value="gemini">Gemini (anahtar gerekir, internet ister)</option>
       </select>
     </label>
     <label class="llm-gemini">Gemini modeli <select id="setGeminiModel"></select></label>
@@ -243,9 +253,6 @@
     </label>
     <label>Anlatım seviyesi
       <select id="setLevel"><option value="basit">Basit (sıfırdan)</option><option value="normal">Normal</option><option value="ileri">İleri (hızlı tekrar)</option></select>
-    </label>
-    <label>Düşünme derinliği
-      <select id="setEffort"><option value="low">Hızlı</option><option value="medium">Dengeli</option><option value="high">Derin (zor sorular)</option></select>
     </label>
     <label class="check"><input id="set3d" type="checkbox"> 3B sınıf ve hoca (kapalıysa 2B çizim; eski bilgisayarda kapat)</label>
     <div class="row">

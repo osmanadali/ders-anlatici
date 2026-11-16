@@ -1,18 +1,19 @@
-"""Claude API çağrıları: canlı anlatım akışı + yapılandırılmış çıktılar (plan, sınav, puanlama, OCR)."""
+"""Hocanın beyni: canlı anlatım akışı + yapılandırılmış çıktılar (plan, sınav, puanlama, OCR).
+
+Varsayılan beyin bu bilgisayarda çalışan yerel yapay zekadır (Ollama + Gemma 4; hiçbir şirkete bağlı değil).
+Gemini yalnızca kullanıcı anahtar girerse isteğe bağlı yardımcıdır. Biri çalışmazsa diğeri devreye girer.
+İçerik iç biçimi (mesaj/blok sözlükleri) llm_yerel / llm_gemini tarafından kendi biçimlerine çevrilir.
+"""
 from __future__ import annotations
 
 import base64
 import json
 from typing import AsyncIterator, Literal
 
-import anthropic
 from pydantic import BaseModel, Field
 
-from . import llm_gemini, prompts
-from .config import anthropic_key, gemini_key, load_settings
-
-FALLBACK_BETA = "server-side-fallback-2026-07-01"
-_client: anthropic.AsyncAnthropic | None = None
+from . import llm_gemini, llm_yerel, prompts, yerel
+from .config import gemini_key, load_settings
 
 
 class TutorError(RuntimeError):
@@ -20,23 +21,43 @@ class TutorError(RuntimeError):
 
 
 def provider() -> str:
-    """Hocanın beyni: 'claude' ya da 'gemini' (ücretsiz kota)."""
+    """Şu an kullanılacak beyin: 'yerel' (varsayılan) ya da 'gemini' (anahtar girilip seçildiyse).
+
+    Otomatik modda yerel yapay zeka henüz kuruluyorsa ve Gemini anahtarı varsa geçici olarak Gemini kullanılır.
+    """
     p = load_settings().get("llm_provider") or ""
-    if p in ("claude", "gemini"):
-        return p
-    return "gemini" if gemini_key() and not anthropic_key() else "claude"
+    if p == "gemini" and gemini_key():
+        return "gemini"
+    if p == "yerel" or not gemini_key() or yerel.hazir():
+        return "yerel"
+    return "gemini"
 
 
-def _can_fallback_to_claude() -> bool:
-    return bool(anthropic_key()) and load_settings().get("claude_fallback", True)
+def _backends() -> list[str]:
+    first = provider()
+    other = "gemini" if first == "yerel" else "yerel"
+    if other == "gemini" and not gemini_key():
+        return [first]
+    if other == "yerel" and not yerel.hazir():
+        return [first]
+    return [first, other]
 
 
-def client() -> anthropic.AsyncAnthropic:
-    global _client
-    if _client is None:
-        # Anahtar .env'de yoksa SDK ortam değişkenlerine / `ant auth login` profiline bakar.
-        _client = anthropic.AsyncAnthropic(api_key=anthropic_key() or None)
-    return _client
+def brain_label(p: str | None = None) -> str:
+    p = p or provider()
+    return "Gemini" if p == "gemini" else f"yerel yapay zeka ({yerel.STATE.get('model') or yerel.secili_model()})"
+
+
+def notes_limit() -> int:
+    """Ders notlarından modele verilecek en fazla karakter (yerel modelin bağlamı küçüktür)."""
+    from .config import FULL_NOTES_CHAR_LIMIT
+
+    if provider() == "gemini":
+        return FULL_NOTES_CHAR_LIMIT
+    return max(8000, int(yerel.baglam() * llm_yerel.CHARS_PER_TOKEN * 0.45))
+
+
+_ERRORS = (llm_gemini.GeminiError, llm_yerel.YerelError)
 
 
 # ---------------------------------------------------------------- içerik blokları
@@ -206,11 +227,17 @@ def build_system(
 
 
 async def stream_steps(system: list[dict], messages: list[dict]) -> AsyncIterator[dict]:
-    """Anlatım adımlarını üretildikçe verir. Son olarak {"final": [...içerik blokları...]} verir."""
-    if provider() == "gemini":
+    """Anlatım adımlarını üretildikçe verir. Son olarak {"final": [...içerik blokları...]} verir.
+
+    Seçili beyin hiç adım üretmeden hata verirse (kurulmamış, kota, bağlantı) sıradaki beyne geçilir.
+    """
+    backends = _backends()
+    last: Exception | None = None
+    for i, be in enumerate(backends):
         parser, full, produced = StepParser(), [], 0
+        stream = (llm_yerel if be == "yerel" else llm_gemini).stream_text(system, messages)
         try:
-            async for text in llm_gemini.stream_text(system, messages):
+            async for text in stream:
                 full.append(text)
                 for obj in parser.feed(text):
                     step = normalize_step(obj)
@@ -223,55 +250,14 @@ async def stream_steps(system: list[dict], messages: list[dict]) -> AsyncIterato
                     yield step
             yield {"final": [{"type": "text", "text": "".join(full)}], "truncated": False}
             return
-        except llm_gemini.GeminiError as e:
-            if not (e.quota and produced == 0 and _can_fallback_to_claude()):
+        except _ERRORS as e:
+            if produced:
                 raise TutorError(str(e)) from e
-            yield {"notice": "Gemini ücretsiz kotası doldu; bu cevap için Claude'a geçtim."}
-    async for item in _claude_stream_steps(system, messages):
-        yield item
-
-
-async def _claude_stream_steps(system: list[dict], messages: list[dict]) -> AsyncIterator[dict]:
-    s = load_settings()
-    parser = StepParser()
-    extra = {}
-    if s.get("web_search"):
-        # Güncel ya da notlarda/kitaplarda bulunmayan bilgiler için internette arama (isteğe bağlı).
-        extra["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}]
-    try:
-        async with client().beta.messages.stream(
-            model=s["claude_model"],
-            max_tokens=32000,
-            system=system,
-            messages=messages,
-            output_config={"effort": s["effort"]},
-            cache_control={"type": "ephemeral"},
-            betas=[FALLBACK_BETA],
-            fallbacks="default",
-            **extra,
-        ) as stream:
-            async for text in stream.text_stream:
-                for obj in parser.feed(text):
-                    step = normalize_step(obj)
-                    if step:
-                        yield step
-            for obj in parser.flush():
-                step = normalize_step(obj)
-                if step:
-                    yield step
-            final = await stream.get_final_message()
-    except anthropic.AuthenticationError as e:
-        raise TutorError("Claude API anahtarı geçersiz ya da tanımlı değil (Ayarlar → API anahtarları).") from e
-    except anthropic.RateLimitError as e:
-        raise TutorError("Claude API hız sınırına takıldı, biraz sonra tekrar dene.") from e
-    except anthropic.APIConnectionError as e:
-        raise TutorError("Claude API'ye bağlanılamadı (internet bağlantını kontrol et).") from e
-    except anthropic.APIStatusError as e:
-        raise TutorError(f"Claude API hatası ({e.status_code}): {e.message}") from e
-
-    if final.stop_reason == "refusal":
-        raise TutorError("Model bu isteği yanıtlamayı reddetti; soruyu farklı ifade etmeyi dene.")
-    yield {"final": [b.to_dict() for b in final.content], "truncated": final.stop_reason == "max_tokens"}
+            if i == len(backends) - 1:
+                raise TutorError(" | ".join([*(str(x) for x in ([last] if last else [])), str(e)])) from e
+            last = e
+            yield {"notice": f"{brain_label(be)} cevap veremedi ({e}); bu cevap için {brain_label(backends[i + 1])} kullanılıyor."}
+    raise TutorError(str(last or "Yapay zeka kullanılamıyor."))
 
 
 # ---------------------------------------------------------------- yapılandırılmış çıktılar
@@ -308,44 +294,14 @@ class Grade(BaseModel):
 
 async def _parse(model_cls, content: list[dict] | str, system: list[dict] | str | None = None, effort: str | None = None,
                  max_tokens: int = 16000):
-    if provider() == "gemini":
+    backends, errors = _backends(), []
+    for be in backends:
         try:
-            return await llm_gemini.parse(model_cls, content, system, max_tokens)
-        except llm_gemini.GeminiError as e:
-            if not (e.quota and _can_fallback_to_claude()):
-                raise TutorError(str(e)) from e
-    return await _claude_parse(model_cls, content, system, effort, max_tokens)
-
-
-async def _claude_parse(model_cls, content, system=None, effort=None, max_tokens: int = 16000):
-    s = load_settings()
-    kwargs = {}
-    if system:
-        kwargs["system"] = system
-    try:
-        # Uzun çıktılar (ders notu, takvim) HTTP zaman aşımına takılmasın diye akış (stream) kullanılır.
-        async with client().beta.messages.stream(
-            model=s["claude_model"],
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": content}],
-            output_format=model_cls,
-            output_config={"effort": effort or s["effort"]},
-            betas=[FALLBACK_BETA],
-            fallbacks="default",
-            **kwargs,
-        ) as stream:
-            resp = await stream.get_final_message()
-    except anthropic.AuthenticationError as e:
-        raise TutorError("Claude API anahtarı geçersiz ya da tanımlı değil (Ayarlar → API anahtarları).") from e
-    except anthropic.APIStatusError as e:
-        raise TutorError(f"Claude API hatası ({e.status_code}): {e.message}") from e
-    except anthropic.APIConnectionError as e:
-        raise TutorError("Claude API'ye bağlanılamadı.") from e
-    if resp.stop_reason == "max_tokens":
-        raise TutorError("Cevap çok uzun olduğu için kesildi; kapsamı daraltıp tekrar dene.")
-    if resp.stop_reason == "refusal" or resp.parsed_output is None:
-        raise TutorError("Model geçerli bir cevap üretemedi, tekrar dene.")
-    return resp.parsed_output
+            mod = llm_yerel if be == "yerel" else llm_gemini
+            return await mod.parse(model_cls, content, system, max_tokens)
+        except _ERRORS as e:
+            errors.append(str(e))
+    raise TutorError(" | ".join(errors))
 
 
 def _notes_system(course: dict, notes_text: str, full: bool) -> list[dict]:
@@ -353,7 +309,6 @@ def _notes_system(course: dict, notes_text: str, full: bool) -> list[dict]:
         {
             "type": "text",
             "text": "Sen bu dersin uzman ve titiz öğretim üyesisin. Türkçe yaz.\n\n" + course_knowledge(course, notes_text, full),
-            "cache_control": {"type": "ephemeral", "ttl": "1h"},
         }
     ]
 
@@ -399,20 +354,8 @@ class PageText(BaseModel):
 
 
 async def ocr_page(png: bytes) -> str:
-    if provider() == "gemini":
-        page = await _parse(PageText, [image_block(png, "image/png"), {"type": "text", "text": prompts.OCR_PAGE}])
-        return page.text.strip()
-    s = load_settings()
-    resp = await client().messages.create(
-        model=s["claude_model"],
-        max_tokens=8000,
-        output_config={"effort": "low"},
-        messages=[{"role": "user", "content": [image_block(png, "image/png"), {"type": "text", "text": prompts.OCR_PAGE}]}],
-    )
-    if resp.stop_reason == "refusal":
-        return ""
-    return "".join(b.text for b in resp.content if b.type == "text").strip()
-
+    page = await _parse(PageText, [image_block(png, "image/png"), {"type": "text", "text": prompts.OCR_PAGE}])
+    return page.text.strip()
 
 
 # ---------------------------------------------------------------- ders kaydı → not

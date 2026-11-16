@@ -33,6 +33,7 @@ def gemini(monkeypatch):
     """stream_steps'i sahte değil, gerçek yönlendiriciyle çalıştır; Gemini ağı yerine sahte metin akışı."""
     monkeypatch.setattr(llm, "stream_steps", llm.real_stream_steps)
     config.save_settings({"llm_provider": "gemini", "deep_solve": "auto"})
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
     calls = {"stream": [], "parse": []}
 
     async def stream_text(system, messages):
@@ -76,35 +77,67 @@ def test_short_chat_skips_deep_solve(gemini):
     assert gemini["parse"] == []
 
 
-def test_quota_falls_back_to_claude(monkeypatch):
-    config.save_settings({"llm_provider": "gemini"})
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+def test_yerel_kullanilamazsa_gemini_devreye_girer(monkeypatch):
+    config.save_settings({"llm_provider": ""})
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    monkeypatch.setattr(llm.yerel, "hazir", lambda: True)
 
-    async def boom(system, messages):
-        raise llm_gemini.GeminiError("kota", quota=True)
+    async def yok(system, messages):
+        raise llm.llm_yerel.YerelError("kurulmadı", unavailable=True)
         yield  # noqa
 
-    async def claude(system, messages):
-        yield {"say": "claude", "board": []}
+    async def gem(system, messages):
+        yield '{"say": "gemini", "board": []}'
 
-    monkeypatch.setattr(llm_gemini, "stream_text", boom)
-    monkeypatch.setattr(llm, "_claude_stream_steps", claude)
+    monkeypatch.setattr(llm.llm_yerel, "stream_text", yok)
+    monkeypatch.setattr(llm_gemini, "stream_text", gem)
 
     async def run():
         return [x async for x in llm.real_stream_steps([], [{"role": "user", "content": "x"}])]
 
     out = asyncio.run(run())
-    assert "notice" in out[0] and out[1]["say"] == "claude"
-    config.save_settings({"llm_provider": ""})
+    assert "notice" in out[0] and out[1]["say"] == "gemini"
 
 
-def test_provider_auto(monkeypatch):
-    config.save_settings({"llm_provider": ""})
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+def test_gemini_kotasi_dolarsa_yerel_devreye_girer(monkeypatch):
+    config.save_settings({"llm_provider": "gemini"})
     monkeypatch.setenv("GEMINI_API_KEY", "g")
+    monkeypatch.setattr(llm.yerel, "hazir", lambda: True)
+
+    async def boom(system, messages):
+        raise llm_gemini.GeminiError("kota", quota=True)
+        yield  # noqa
+
+    async def yer(system, messages):
+        yield '{"say": "yerel", "board": []}'
+
+    monkeypatch.setattr(llm_gemini, "stream_text", boom)
+    monkeypatch.setattr(llm.llm_yerel, "stream_text", yer)
+
+    async def run():
+        return [x async for x in llm.real_stream_steps([], [{"role": "user", "content": "x"}])]
+
+    out = asyncio.run(run())
+    assert "notice" in out[0] and out[1]["say"] == "yerel"
+    config.save_settings({"llm_provider": ""})
+
+
+def test_beyin_secimi(monkeypatch):
+    config.save_settings({"llm_provider": ""})
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(llm.yerel, "hazir", lambda: False)
+    assert llm.provider() == "yerel"  # anahtar yok: her zaman yerel
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    assert llm.provider() == "gemini"  # yerel kurulurken geçici olarak Gemini
+    monkeypatch.setattr(llm.yerel, "hazir", lambda: True)
+    assert llm.provider() == "yerel"  # yerel hazır olunca yerel
+    config.save_settings({"llm_provider": "gemini"})
     assert llm.provider() == "gemini"
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
-    assert llm.provider() == "claude"
+    monkeypatch.delenv("GEMINI_API_KEY")
+    assert llm.provider() == "yerel"  # anahtarsız Gemini seçimi geçersiz
+    config.save_settings({"llm_provider": "claude"})
+    assert config.load_settings()["llm_provider"] == ""  # eski Claude seçimi temizlenir
+    config.save_settings({"llm_provider": ""})
 
 
 class _Err(Exception):
