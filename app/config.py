@@ -86,6 +86,8 @@ DEFAULTS = {
     "openalex_api_key": "",  # isteğe bağlı: OpenAlex kotası dolarsa
     "kutuphane_dosya_sakla": False,  # kitap öğrenildikten sonra PDF kopyası silinir (metin veritabanında)
     "kitap_otomatik": True,  # literatür taramasında derslere uyan serbest lisanslı ders kitaplarını da ekle
+    "kendi_calisma": True,  # bilgisayar boşken hoca kaynaklardan soru üretip doğrulayarak kendini hazırlar
+    "ogretme_tarzi": "anlat",  # anlat | sokratik (önce öğrenciye sorarak yönlendir)
     "literatur_otomatik": True,  # haftada bir literatür taraması (yeni makaleler kütüphaneye)
 }
 

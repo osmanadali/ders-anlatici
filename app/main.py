@@ -16,9 +16,9 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from . import auth, curriculum, hazir, klasor, kutuphane, llm, notes, paket, prompts, siniflandir, store, voice, yerel
+from . import auth, calisma, curriculum, hazir, klasor, kutuphane, llm, notes, ogrenme, paket, prompts, siniflandir, store, voice, yerel
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -143,6 +143,7 @@ async def post_settings(patch: dict):
 
 # ---------------------------------------------------------------- hazırlık durumu
 _literatur_gorevi: asyncio.Task | None = None
+_calisma_gorevi: asyncio.Task | None = None
 
 
 @app.on_event("startup")
@@ -177,6 +178,9 @@ async def _warm_up():
             _literatur_gorevi = asyncio.create_task(literatur.zamanlayici())
         except Exception:
             log.exception("literatür zamanlayıcı başlatılamadı")
+    if os.getenv("DERS_ON_YUKLEME", "1") != "0":
+        global _calisma_gorevi
+        _calisma_gorevi = asyncio.create_task(calisma.zamanlayici())  # bilgisayar boşken kendi kendine çalışma
     # Masaüstündeki "Not Kutusu" ve İndirilenler'deki ders paketleri kendiliğinden içe aktarılır
     if os.getenv("DERS_ON_YUKLEME", "1") != "0":
         klasor.baslat(otomatik_ekle)
@@ -920,9 +924,22 @@ async def ask(
 
     kaynak_txt = await _kaynak_bolumleri(course, text.strip() or user_text)
     nt = notes.notes_context(course, user_text, focus, limit=llm.notes_limit() - len(kaynak_txt))
+    soru_metni = text.strip() or user_text
+    ogrenme_txt = ""
+    tarz = "anlat"
+    if mode == "chat":  # ders bölümü/sayfa anlatımında ek bloklar eklenmez
+        if text.strip():
+            ogrenme.profil_say(text, not_mu=False)
+        try:
+            ogrenme_txt = "\n\n".join(b for b in (
+                ogrenme.ogrenme_blogu(course_id or None, soru_metni),
+                calisma.dogrulanmis_blok(course, soru_metni)) if b)
+        except Exception:
+            log.exception("öğrenme blokları kurulamadı")
+        tarz = "sokratik" if settings.get("ogretme_tarzi") == "sokratik" else "anlat"
     system = llm.build_system(
         course, nt.text, nt.full, store.memory_summary(course_id or None), settings.get("level", "normal"),
-        conversation=(style == "konusma"), kaynaklar=kaynak_txt,
+        conversation=(style == "konusma"), kaynaklar=kaynak_txt, ogrenme=ogrenme_txt, tarz=tarz,
     )
     messages = session["messages"] + [user_msg]
     sid = session["id"]
@@ -930,6 +947,7 @@ async def ask(
     session["timeline"].append(
         {"type": "user", "text": text.strip() or user_text[:200], "attachments": attach_names, "mode": mode}
     )
+    user_sira = len(session["timeline"]) - 1  # geri bildirim bu turu bu indeksle bulur
 
     async def gen():
         with llm.on_plan():  # öğrenci soruyor: arka plan işleri (paket, OCR) yerel modeli bırakır
@@ -937,7 +955,7 @@ async def ask(
                 yield chunk
 
     async def gen_inner():
-        yield _sse({"type": "session", "id": sid})
+        yield _sse({"type": "session", "id": sid, "sira": user_sira})
         steps: list[dict] = []
         final = None
         prev_say = ""
@@ -1001,6 +1019,59 @@ async def ask(
             store.save_session(session)
 
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+# ================================================================ hocanın kendini geliştirmesi
+class GeriBildirim(BaseModel):
+    session_id: str
+    sira: int
+    puan: int
+    # Python'da 'not' ayrılmış sözcük: JSON'daki "not" alanı takma adla okunur
+    not_: str = Field("", alias="not")
+
+    model_config = {"populate_by_name": True}
+
+
+@app.post("/api/geri-bildirim")
+async def geri_bildirim(body: GeriBildirim):
+    if body.puan not in (1, -1):
+        raise HTTPException(400, "Puan 1 ya da -1 olmalı")
+    try:
+        session = store.load_session(body.session_id)
+    except ValueError:
+        session = None
+    if session is None:
+        raise HTTPException(404, "Oturum bulunamadı")
+    try:
+        k = ogrenme.geri_bildirim_kaydet(session, body.sira, body.puan, body.not_)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "puan": k["puan"]}
+
+
+@app.get("/api/calisma")
+async def calisma_durumu():
+    return calisma.durum()
+
+
+@app.get("/api/soru-bankasi")
+async def soru_bankasi(ders: str, n: int = 5):
+    try:
+        course = notes.get_course(ders)
+    except ValueError:
+        course = None
+    if course is None:
+        raise HTTPException(404, "Ders bulunamadı")
+    q = calisma.quiz_sorulari(course, n)
+    if not q["questions"]:
+        raise HTTPException(404, "Bu ders için soru bankasında henüz doğrulanmış soru yok")
+    return q
+
+
+@app.delete("/api/profil")
+async def profil_sifirla():
+    ogrenme.profil_sifirla()
+    return {"ok": True}
 
 
 # ================================================================ hazır müfredat

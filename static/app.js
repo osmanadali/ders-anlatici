@@ -91,6 +91,39 @@
     S.tutorBubble = null;
   }
   function scrollChat() { const l = $("#chatLog"); l.scrollTop = l.scrollHeight; }
+  // Hocanın cevabının altına 👍 👎 düğmeleri; 👎'da isteğe bağlı "neden?" seçenekleri
+  function addFeedbackBar(afterEl, sid, sira) {
+    if (!afterEl || !sid || sira == null) return;
+    const bar = document.createElement("div");
+    bar.className = "fb-bar";
+    bar.innerHTML = '<button class="ghost small" data-p="1" title="İyi anlattı">👍</button><button class="ghost small" data-p="-1" title="İyi değildi">👎</button><span class="fb-why hidden"></span>';
+    const why = bar.querySelector(".fb-why");
+    const send = async (puan, not) => {
+      try {
+        await postJSON("/api/geri-bildirim", { session_id: sid, sira, puan, not: not || "" });
+        bar.querySelectorAll("button[data-p]").forEach((b) => b.classList.toggle("on", Number(b.dataset.p) === puan));
+        why.classList.add("hidden");
+        toast(puan > 0 ? "Teşekkürler, bu tarzı aklımda tutacağım." : "Teşekkürler, bir dahaki sefere daha iyi anlatmaya çalışacağım.");
+      } catch (e) { toast("Geri bildirim kaydedilemedi: " + e.message); }
+    };
+    bar.querySelector('[data-p="1"]').onclick = () => send(1);
+    bar.querySelector('[data-p="-1"]').onclick = () => {
+      send(-1);
+      why.classList.remove("hidden");
+      why.innerHTML = "";
+      ["anlamadım", "çok hızlı", "yanlış", "çok uzun"].forEach((n) => {
+        const b = document.createElement("button");
+        b.className = "ghost small"; b.textContent = n;
+        b.onclick = () => send(-1, n);
+        why.appendChild(b);
+      });
+      const inp = document.createElement("input");
+      inp.placeholder = "Neden? (isteğe bağlı)"; inp.maxLength = 200;
+      inp.onkeydown = (e) => { if (e.key === "Enter" && inp.value.trim()) send(-1, inp.value.trim()); };
+      why.appendChild(inp);
+    };
+    afterEl.after(bar);
+  }
   function addMsg(kind, text, att) {
     $("#chatLog .hint")?.remove();
     const d = document.createElement("div");
@@ -192,7 +225,8 @@
 
   function handleEvent(ev) {
     switch (ev.type) {
-      case "session": S.sessionId = ev.id; break;
+      case "session": S.sessionId = ev.id; S.turSira = ev.sira; break;
+      case "done": addFeedbackBar(S.tutorBubble, S.sessionId, S.turSira); break;
       case "step": player.enqueue(ev); break;
       case "memory": toast(`Not aldım: “${ev.topic}” konusunu tekrar edeceğiz.`); break;
       case "notice": toast(ev.message); break;
@@ -918,6 +952,10 @@
     try {
       libRender(await api("/api/kutuphane"));
       $("#libMsg").textContent = "";
+      api("/api/calisma").then((c) => {
+        $("#calismaSatiri").textContent = c.acik === false ? "🧠 Kendi kendine çalışma kapalı (Ayarlar'dan açılır)"
+          : `🧠 Kendi kendine çalışma: ${c.soru_sayisi} doğrulanmış soru` + (c.calisiyor ? " · şu an çalışıyor…" : "");
+      }).catch(() => {});
     } catch (e) { $("#libMsg").textContent = "Kütüphane yüklenemedi: " + e.message; }
     libSchedule();
   }
@@ -1198,6 +1236,16 @@
     } catch (e) { $("#quizArea").innerHTML = ""; toast("Hata: " + e.message); }
     $("#quizBtn").disabled = false;
   };
+  $("#bankBtn").onclick = async () => {
+    if (!S.courseId) return toast("Önce bir ders seç.");
+    $("#bankBtn").disabled = true;
+    try {
+      const q = await api(`/api/soru-bankasi?ders=${encodeURIComponent(S.courseId)}&n=5`);
+      S.quiz = { questions: q.questions, i: 0, results: [] };
+      renderQuestion();
+    } catch (e) { toast(e.message); }
+    $("#bankBtn").disabled = false;
+  };
   function speak(text) {
     if (S.settings.tts_enabled === false) {
       const u = new SpeechSynthesisUtterance(text); u.lang = "tr-TR"; speechSynthesis.speak(u); return;
@@ -1333,13 +1381,19 @@
     board.clear();
     $("#chatLog").innerHTML = "";
     switchTab("chat");
-    for (const t of s.timeline) {
-      if (t.type === "user") { addMsg("user", t.text, t.attachments); S.tutorBubble = addMsg("tutor", ""); }
+    let sonUser = null;
+    for (const [ti, t] of s.timeline.entries()) {
+      if (t.type === "user") {
+        if (sonUser) addFeedbackBar(sonUser.bubble, sid, sonUser.sira);
+        addMsg("user", t.text, t.attachments); S.tutorBubble = addMsg("tutor", "");
+        sonUser = { bubble: S.tutorBubble, sira: ti };
+      }
       else if (t.type === "step") {
         if (instant) { await board.renderInstant(t.board); if (S.tutorBubble && t.say) S.tutorBubble.textContent += " " + t.say; }
         else player.enqueue({ ...t });
       }
     }
+    if (sonUser) addFeedbackBar(sonUser.bubble, sid, sonUser.sira);
     toast(instant ? "Kayıt yüklendi. Sorunu yazarak kaldığın yerden devam edebilirsin." : "Kayıt oynatılıyor…");
   }
 
@@ -1371,6 +1425,8 @@
     }).catch(() => {});
     $("#setWeb").checked = !!st.web_search;
     $("#setOtoPaket").checked = st.otomatik_paket !== false;
+    $("#setTarz").value = st.ogretme_tarzi === "sokratik" ? "sokratik" : "anlat";
+    $("#setKendiCalisma").checked = st.kendi_calisma !== false;
     $("#set3d").checked = localGet("hoca3d") !== "0";
     $("#setConvStt").value = localGet("convStt") === "whisper" || !window.BrowserConversation?.available() ? "whisper" : "browser";
     ["keyGemini", "keyEleven"].forEach((id) => ($("#" + id).value = ""));
@@ -1440,6 +1496,10 @@
       $("#sampleStatus").textContent = "Kaydediliyor… metni okuyunca Bitir'e bas";
     } catch (e) { toast("Mikrofon açılamadı: " + e.message); }
   };
+  $("#profilSifirla").onclick = async () => {
+    if (!confirm("Hocanın senin tercihlerinden öğrendikleri silinsin mi?")) return;
+    try { await api("/api/profil", { method: "DELETE" }); toast("Öğrenci profili sıfırlandı."); } catch (e) { toast("Hata: " + e.message); }
+  };
   $("#saveSettings").onclick = async () => {
     const keys = {};
     if ($("#keyGemini").value.trim()) keys.gemini = $("#keyGemini").value.trim();
@@ -1466,6 +1526,8 @@
       stt_provider: $("#setStt").value,
       web_search: $("#setWeb").checked,
       otomatik_paket: $("#setOtoPaket").checked,
+      ogretme_tarzi: $("#setTarz").value,
+      kendi_calisma: $("#setKendiCalisma").checked,
     });
     localSet("sens", $("#setSens").value);
     localSet("hoca3d", $("#set3d").checked ? "1" : "0");

@@ -64,7 +64,7 @@ Grafik çizdirilmesi gereken sorularda grafiği nasıl çizeceğini adım adım 
 - Emin olmadığın sayısal sonuçları kendi içinde kontrol et; tahtaya yanlış sonuç yazma.
 - Öğrenci araya girip "anlamadım" derse aynı şeyi tekrarlama: daha basit bir yol, bir benzetme ya da küçük bir örnekle anlat.
 - Tahtada her satır kısa olsun (en fazla ~45 karakter). Uzun ifadeleri birkaç satıra böl.
-- Sonunda öğrencinin anladığını kontrol eden kısa bir soru sorabilirsin ya da "başka takıldığın yer var mı?" diyebilirsin.
+- Anlatım uzunsa (4 veya daha çok adım) sonunda öğrencinin anladığını kontrol eden TEK bir kısa soru sor ve cevabını bekle; kısa cevaplarda "başka takıldığın yer var mı?" demen yeterli.
 """
 
 LEVELS = {
@@ -72,6 +72,13 @@ LEVELS = {
     "normal": "Öğrenci konuyu biraz biliyor: dengeli ve açık anlat.",
     "ileri": "Öğrenci iyi seviyede: hızlı ve öz anlat, kritik noktalara odaklan, sınav püf noktalarını ver.",
 }
+
+
+SOKRATIK = (
+    "ÖĞRETME TARZI: SOKRATİK. Cevabı hemen verme; öğrenciyi küçük, tek tek sorularla yönlendir ve cevaba kendisinin "
+    "ulaşmasını sağla. Her turda 1-2 kısa soru sor, öğrencinin cevabını değerlendir. Takılırsa önce bir ipucu ver. "
+    "2-3 turda ilerleyemezse cevabı açıkça anlat. Öğrenci doğrudan 'anlat' derse anlat."
+)
 
 
 def notes_block(course_name: str, notes_text: str, full: bool) -> str:

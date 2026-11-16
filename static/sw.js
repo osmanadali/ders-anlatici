@@ -1,5 +1,5 @@
 // Uygulama olarak kurulabilmesi için basit service worker: arayüz dosyalarını önbelleğe alır, API'yi hep ağdan ister.
-const CACHE = "ders-v2";
+const CACHE = "ders-v3";
 const SHELL = ["/", "/static/style.css", "/static/app.js", "/static/board.js", "/static/player.js",
   "/static/teacher.js", "/static/conversation.js", "/static/icon-192.png"];
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));

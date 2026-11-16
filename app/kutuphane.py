@@ -1048,6 +1048,16 @@ def ara(sorgu: str, ders_kodu: str | None = None, k: int = 8, tur: str | None = 
     return out
 
 
+def rastgele_parcalar(n: int = 30, en_az: int = 300) -> list[dict]:
+    """Hazır kaynaklardan rastgele parçalar (kendi kendine çalışma için): metin, baslik, sayfa, dersler."""
+    with _kilit:
+        rows = _db().execute(
+            "SELECT p.id, p.sayfa, p.metin, k.baslik, k.dersler FROM parcalar p JOIN kaynaklar k ON k.id=p.kaynak_id "
+            "WHERE k.durum='hazir' AND length(p.metin) >= ? ORDER BY RANDOM() LIMIT ?", (en_az, n)).fetchall()
+    return [{"id": r["id"], "sayfa": r["sayfa"], "metin": r["metin"], "baslik": r["baslik"],
+             "dersler": json.loads(r["dersler"] or "[]")} for r in rows]
+
+
 def atif(s: dict) -> str:
     """Kısa kaynak gösterimi: 'Montgomery, İstatistiksel Kalite Kontrol (2019), s.45'."""
     ad = s.get("baslik") or "Kaynak"

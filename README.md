@@ -189,6 +189,13 @@ tests/           Birim + API testleri (sahte servislerle), demo sunucu
 
 Veriler (`veri/` klasörü: notlar, kayıtlar, ses dosyaları, hafıza) yalnızca senin bilgisayarında tutulur.
 
+## 🌱 Hoca kendini nasıl geliştirir
+
+- **Geri bildirim:** Hocanın her cevabının altındaki 👍 / 👎 düğmeleri (👎'da "anlamadım, çok hızlı, yanlış, çok uzun" ya da kendi notun) `veri/ogrenme/geri_bildirim.jsonl` dosyasına yazılır. Aynı dersteki benzer sorularda beğendiğin anlatımlar "iyi örnek", beğenmediklerin "kaçın" olarak kısa bir blokla hocaya verilir (en fazla ~1100 karakter).
+- **Kendi kendine çalışma:** Bilgisayar boşken (son etkinlikten en az 5 dk sonra, saatte en fazla 20 soru) hoca kütüphane parçalarından ve ders notlarından soru-cevap üretir, ikinci bir çağrıyla kaynakla karşılaştırıp doğrular; yalnızca doğrulananlar soru bankasına girir. Bunlar cevaplarda "doğrulanmış bilgi" olarak kullanılır; Sınav sekmesindeki **🏦 Soru bankasından sor** ile de çözebilirsin. Ayarlar'dan kapatılabilir (yalnızca yerel yapay zekada çalışır).
+- **Seni tanıma:** "örnek ver", "daha yavaş", "kısaca", "formülle" gibi isteklerin ve 👎 notların sayılır; bir tercih en az 3 kez görülünce hocaya 1-2 satırlık "öğrencinin tercihleri" eklenir. Ayarlar'dan **Öğrenci profilimi sıfırla** ile silinir.
+- **Öğretme tarzı:** Ayarlar'dan "Anlat" (varsayılan) ya da "Sokratik" (hoca önce küçük sorularla yönlendirir, takılırsan ipucu verir, 2-3 turda ilerlemezsen açıklar). Her iki tarzda uzun anlatımların sonunda hoca tek bir kısa kontrol sorusu sorar.
+
 ## Test
 
 ```bash

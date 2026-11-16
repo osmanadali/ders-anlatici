@@ -74,6 +74,11 @@ async def arka_plan_sirasi() -> None:
         await _asyncio.sleep(2)
 
 
+def ogrenci_bosta(sn: float = 300) -> bool:
+    """Öğrenci hoca ile konuşmuyor ve son etkinliğinden en az sn saniye geçti mi (kendi kendine çalışma için)."""
+    return _on_plan == 0 and _time.time() - _son_etkinlik >= sn
+
+
 def ai_hazir() -> bool:
     """Şu an bir yapay zeka cevap verebilir mi (yerel hazır ya da Gemini anahtarı var)?"""
     return yerel.hazir() or bool(gemini_key())
@@ -267,7 +272,7 @@ def course_knowledge(course: dict | None, notes_text: str, full: bool) -> str:
 
 def build_system(
     course: dict | None, notes_text: str, full: bool, memory: str, level: str, conversation: bool = False,
-    kaynaklar: str = "",
+    kaynaklar: str = "", ogrenme: str = "", tarz: str = "anlat",
 ) -> list[dict]:
     system: list[dict] = [{"type": "text", "text": prompts.TUTOR_SYSTEM}]
     knowledge = course_knowledge(course, notes_text, full)
@@ -282,6 +287,10 @@ def build_system(
         extra += "\n\n" + prompts.CONVERSATION_STYLE
     if memory:
         extra += "\n\n" + memory
+    if ogrenme:  # geri bildirimden öğrenilenler, öğrenci tercihleri, doğrulanmış bilgi (kısa)
+        extra += "\n\n" + ogrenme
+    if tarz == "sokratik":
+        extra += "\n\n" + prompts.SOKRATIK
     system.append({"type": "text", "text": extra})
     return system
 
