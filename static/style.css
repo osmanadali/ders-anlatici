@@ -270,3 +270,16 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .classroom { box-shadow: var(--shadow); border-radius: 14px; }
 .hint { background: var(--panel-2); border: 1px dashed var(--line); }
 .chip { background: var(--panel-2); }
+
+/* deneme sınavı */
+.deneme h4 { margin: 18px 0 6px; color: var(--accent); }
+.deneme .dq { padding: 8px 10px; border-radius: 10px; margin: 6px 0; background: var(--panel); border: 1px solid transparent; }
+.deneme .dq.ok { border-color: #3c9a6e; }
+.deneme .dq.bad { border-color: #c4604f; }
+.deneme .dq .q { margin-bottom: 6px; line-height: 1.5; }
+.deneme .opt { display: flex; gap: 6px; align-items: baseline; margin: 3px 0; }
+.deneme textarea { width: 100%; box-sizing: border-box; }
+.deneme .key { margin-top: 6px; font-size: .95em; }
+.deneme .metin { margin: 6px 0; padding: 10px 14px; border-left: 4px solid var(--accent); background: var(--panel); border-radius: 6px; line-height: 1.6; }
+.konu-md { line-height: 1.6; max-height: 60vh; overflow: auto; }
+.konu-md h3, .konu-md h4, .konu-md h5 { margin: 14px 0 4px; }

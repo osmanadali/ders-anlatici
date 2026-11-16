@@ -450,6 +450,7 @@
       rb.classList.remove("hidden");
       rb.querySelector("div").innerHTML = BoardUtil.renderInline(S.course.sinav_rehberi).replace(/\n/g, "<br>");
     } else rb.classList.add("hidden");
+    renderDenemeler();
     renderDocs();
     loadWeak();
     if ($("#tab-plan").classList.contains("active")) loadPlanTab();
@@ -547,6 +548,104 @@
     S.course = await api(`/api/courses/${S.courseId}`);
     renderDocs();
   });
+
+  $("#packInput").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    $("#uploadStatus").textContent = `Ders paketi yükleniyor: ${f.name}…`;
+    const fd = new FormData();
+    fd.append("file", f, f.name);
+    try {
+      const r = await api("/api/hazir", { method: "POST", body: fd });
+      toast(`📦 ${r.ders || r.id}: ${r.belge} belgelik paket kuruldu` +
+        (r.uygulanan ? `, ${r.uygulanan} yüklü nota uygulandı.` : ". Aynı PDF'leri yüklediğinde kendiliğinden eşleşecek."));
+      if (S.courseId) await selectCourse(S.courseId);
+    } catch (err) { toast("Paket yüklenemedi: " + err.message); }
+    $("#uploadStatus").textContent = "";
+  });
+
+  // ================================================================ deneme sınavları + konu anlatımı (ders paketinden)
+  function mdLite(md) {  // başlık, madde, kalın, paragraf: konu anlatımı için yeterli
+    const inl = (t) => BoardUtil.renderInline(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    let html = "", list = "";
+    const close = () => { if (list) { html += `</${list}>`; list = ""; } };
+    for (const raw of String(md || "").split("\n")) {
+      const line = raw.trimEnd();
+      let m;
+      if ((m = line.match(/^(#{1,4})\s+(.*)/))) { close(); const n = Math.min(6, m[1].length + 2); html += `<h${n}>${inl(m[2])}</h${n}>`; }
+      else if ((m = line.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { close(); html += "<ul>"; list = "ul"; } html += `<li>${inl(m[1])}</li>`; }
+      else if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== "ol") { close(); html += "<ol>"; list = "ol"; } html += `<li>${inl(m[1])}</li>`; }
+      else if (!line.trim()) close();
+      else { close(); html += `<p>${inl(line)}</p>`; }
+    }
+    close();
+    return html;
+  }
+  function renderDenemeler() {
+    const kb = $("#konuBox"), db = $("#denemeBox"), ex = S.course?.denemeler || [];
+    if (S.course?.konu_anlatimi) {
+      kb.classList.remove("hidden");
+      kb.querySelector("div").innerHTML = mdLite(S.course.konu_anlatimi);
+    } else kb.classList.add("hidden");
+    db.classList.toggle("hidden", !ex.length);
+    $("#denemeBtns").innerHTML = ex.map((x, i) => `<button class="ghost small" data-i="${i}">${(x.baslik || "Deneme " + (i + 1)).replace(/</g, "&lt;")}</button>`).join(" ");
+    $("#denemeBtns").querySelectorAll("button").forEach((b) => (b.onclick = () => openDeneme(ex[+b.dataset.i])));
+  }
+  function openDeneme(x) {
+    const esc = (t) => BoardUtil.renderInline(t || "");
+    const src = (t) => (t ? `<span class="muted small"> (${String(t).replace(/</g, "&lt;")})</span>` : "");
+    const open = [];  // açık uçlu sorular (değerlendirme için)
+    const openQ = (soru, ornek, puan, kaynak, label) => {
+      const k = open.push({ question: soru, kind: "acik_uclu", choices: [], answer: ornek + (puan ? "\nPuanlama: " + puan : ""), topic: label, page: kaynak || "" }) - 1;
+      return `<div class="dq"><div class="q">${esc(soru)}</div><textarea rows="5" data-open="${k}" placeholder="Cevabını yaz…"></textarea>
+        <div class="row"><button class="ghost small" data-grade="${k}">Hocaya değerlendirt</button></div><div class="fb hidden" data-fb="${k}"></div>
+        <details class="key hidden"><summary>Örnek cevap</summary><p>${esc(ornek).replace(/\n/g, "<br>")}</p>${puan ? `<p class="muted small"><b>Puanlama:</b> ${esc(puan)}</p>` : ""}${src(kaynak)}</details></div>`;
+    };
+    const area = $("#quizArea");
+    area.innerHTML = `<div class="deneme">
+      <div class="row"><h3 style="margin:0">${esc(x.baslik)}</h3><div class="spacer"></div><button class="ghost small" data-k="close">✕ Kapat</button></div>
+      <p class="muted small">Süre sınırı yok. Cevaplarını işaretle/yaz, sonra en alttan “Kontrol et”.</p>
+      <h4>1. Bölüm — Doğru / Yanlış</h4>
+      ${(x.bolum1_dy || []).map((q, i) => `<div class="dq dy" data-i="${i}"><div class="q">${i + 1}. ${esc(q.ifade)}</div>
+        <label class="check"><input type="radio" name="dy${i}" value="D"> D</label> <label class="check"><input type="radio" name="dy${i}" value="Y"> Y</label>
+        <div class="key hidden">Cevap: <b>${q.cevap}</b> — ${esc(q.aciklama)}${src(q.kaynak)}</div></div>`).join("")}
+      <h4>2. Bölüm — Çoktan seçmeli</h4>
+      ${(x.bolum2_coktan || []).map((q, i) => `<div class="dq mc" data-i="${i}"><div class="q">${i + 1}. ${esc(q.soru)}</div>
+        ${(q.siklar || []).map((c, k) => `<label class="check opt"><input type="radio" name="mc${i}" value="${"ABCDE"[k]}"> <b>${"ABCDE"[k]})</b> ${esc(String(c).replace(/^[A-E][).]\s*/, ""))}</label>`).join("")}
+        <div class="key hidden">Cevap: <b>${String(q.cevap).trim().charAt(0)}</b> — ${esc(q.aciklama)}${src(q.kaynak)}</div></div>`).join("")}
+      <h4>3. Bölüm — Metin soruları</h4>
+      <blockquote class="metin">${esc(x.bolum3_metin?.metin).replace(/\n/g, "<br>")}</blockquote>
+      ${(x.bolum3_metin?.sorular || []).map((q, i) => openQ(`${i + 1}. ${q.soru}`, q.ornek_cevap, "", x.bolum3_metin?.kaynak, "Metin sorusu")).join("")}
+      <h4>4. Bölüm — Klasik</h4>
+      ${(x.bolum4_klasik || []).map((q) => openQ(q.soru, q.ornek_cevap, q.puanlama, q.kaynak, "Klasik soru")).join("")}
+      <h4>5. Bölüm — Bonus</h4>
+      ${(x.bolum5_bonus || []).map((q) => openQ(q.soru, q.cozum, "", "", "Bonus soru")).join("")}
+      <div class="row"><button class="primary" data-k="check">Kontrol et</button><span class="dscore"></span></div>
+    </div>`;
+    area.querySelector('[data-k="close"]').onclick = () => { area.innerHTML = ""; };
+    area.querySelectorAll("[data-grade]").forEach((b) => (b.onclick = async () => {
+      const k = +b.dataset.grade, ans = area.querySelector(`[data-open="${k}"]`).value.trim(), fb = area.querySelector(`[data-fb="${k}"]`);
+      if (!ans) return toast("Önce cevabını yaz.");
+      b.disabled = true; fb.classList.remove("hidden"); fb.className = "fb"; fb.textContent = "Değerlendiriliyor…";
+      const fd = new FormData();
+      fd.append("question", JSON.stringify(open[k])); fd.append("answer", ans); fd.append("course_id", S.courseId || "");
+      try { showFeedback(fb, await api("/api/quiz/grade", { method: "POST", body: fd })); } catch (e) { fb.textContent = "Hata: " + e.message; }
+      b.disabled = false;
+    }));
+    area.querySelector('[data-k="check"]').onclick = () => {
+      let ok = 0, n = 0;
+      const mark = (el, picked, right) => {
+        n++; const good = picked === right; if (good) ok++;
+        el.classList.toggle("ok", good); el.classList.toggle("bad", !good);
+      };
+      area.querySelectorAll(".dy").forEach((el) => mark(el, el.querySelector("input:checked")?.value, x.bolum1_dy[+el.dataset.i].cevap));
+      area.querySelectorAll(".mc").forEach((el) => mark(el, el.querySelector("input:checked")?.value, String(x.bolum2_coktan[+el.dataset.i].cevap).trim().charAt(0).toUpperCase()));
+      area.querySelectorAll(".key").forEach((el) => el.classList.remove("hidden"));
+      area.querySelector(".dscore").textContent = ` D/Y + test: ${ok}/${n} doğru. Açık uçlu cevapları örnek cevapla karşılaştır ya da “Hocaya değerlendirt”.`;
+    };
+    area.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   // ================================================================ müfredattan ders ekle
   let programs = [];

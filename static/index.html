@@ -97,6 +97,9 @@
         <label class="ghost small file-label" title="Hocanın ders ses/video kaydı: yazıya döküp düzenli nota çevirir">🎙 Ders kaydı yükle
           <input id="recInput" type="file" accept="audio/*,video/*" hidden>
         </label>
+        <label class="ghost small file-label" title="Önceden işlenmiş ders paketi (.json): taranmış sayfalar, ders planı, konu anlatımı, deneme sınavları">📦 Ders paketi yükle
+          <input id="packInput" type="file" accept=".json,application/json" hidden>
+        </label>
         <button id="formulaBtn" class="ghost small" title="Notlardan ve müfredattan sınav formül kâğıdı">📄 Formül kâğıdı</button>
         <span id="uploadStatus" class="muted"></span>
       </div>
@@ -139,6 +142,8 @@
         <button id="quizBtn" class="primary">Sınav hazırla</button>
       </div>
       <details id="rehberBox" class="profile-box hidden"><summary>📘 Sınav rehberi (notlardan)</summary><div></div></details>
+      <details id="konuBox" class="profile-box hidden"><summary>📗 Sınav odaklı konu anlatımı</summary><div class="konu-md"></div></details>
+      <div id="denemeBox" class="profile-box hidden"><b>📝 Deneme sınavları (hocanın formatında)</b> <span id="denemeBtns"></span></div>
       <div id="quizArea"></div>
       <h4>Zayıf konuların</h4>
       <ul id="weakList" class="weak-list"><li class="muted">Henüz kayıt yok.</li></ul>

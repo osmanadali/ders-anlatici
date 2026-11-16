@@ -1,4 +1,4 @@
-"""Hazır ders paketleri (app/hazir/*.json).
+"""Hazır ders paketleri (app/hazir/*.json ve kullanıcının yüklediği veri/hazir/*.json).
 
 Bir dersin PDF'leri önceden okunup işlenmiştir: taranmış sayfaların metinleri, belge özetleri, kavramlar,
 ders planı, kavram kâğıdı ve sınav rehberi. Öğrenci aynı PDF'leri yüklediğinde dosya adından tanınır ve
@@ -14,20 +14,24 @@ from functools import lru_cache
 from pathlib import Path
 
 from . import notes
+from .config import DATA_DIR
 
-DIR = Path(__file__).resolve().parent / "hazir"
+DIR = Path(__file__).resolve().parent / "hazir"  # depoyla gelen paketler
+USER_DIR = DATA_DIR / "hazir"  # "Ders paketi yükle" ile eklenenler (hocanın notları depoya konmaz)
+MAX_BYTES = 30 * 1024 * 1024
 
 
 def key(name: str) -> str:
     """Dosya adını eşleştirme anahtarına çevirir: uzantısız, büyük/küçük harf ve Türkçe karakter duyarsız."""
-    n = unicodedata.normalize("NFKD", Path(name).stem).encode("ascii", "ignore").decode().lower()
+    name = re.sub(r"\.(pdf|png|jpe?g|webp|heic|gif|bmp|tiff?)$", "", name.strip(), flags=re.I)  # yalnızca gerçek uzantı
+    n = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
     return re.sub(r"[^a-z0-9]+", "", n)
 
 
 @lru_cache(maxsize=None)
 def packs() -> list[dict]:
     out = []
-    for f in sorted(DIR.glob("*.json")):
+    for f in sorted(DIR.glob("*.json")) + sorted(USER_DIR.glob("*.json")):
         try:
             p = json.loads(f.read_text("utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -71,8 +75,43 @@ def apply_to_document(course_id: str, doc: dict, filename: str) -> bool:
         course["formula_sheet"] = pack["kavram_kagidi"] | {"created": time.time(), "focus": "", "hazir": True}
     if pack.get("sinav_rehberi") and not course.get("sinav_rehberi"):
         course["sinav_rehberi"] = pack["sinav_rehberi"]
+    for k in ("denemeler", "konu_anlatimi"):
+        if pack.get(k):
+            course[k] = pack[k]
     notes.save_course(course)
     return True
+
+
+def install_pack(data: bytes) -> dict:
+    """Yüklenen paketi doğrular, veri/hazir/ altına kaydeder ve var olan derslerdeki eşleşen belgelere uygular."""
+    if len(data) > MAX_BYTES:
+        raise ValueError("Paket çok büyük.")
+    try:
+        p = json.loads(data.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError("Bu bir ders paketi değil (JSON okunamadı).")
+    if not isinstance(p, dict) or not isinstance(p.get("docs"), dict) or not p["docs"]:
+        raise ValueError("Bu bir ders paketi değil (belge listesi yok).")
+    pid = key(p.get("kurs_kodu") or p.get("ders") or "paket") or "paket"
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = USER_DIR / f"{pid}.json.yeni"
+    tmp.write_text(json.dumps(p, ensure_ascii=False), "utf-8")
+    tmp.replace(USER_DIR / f"{pid}.json")
+    packs.cache_clear()
+    applied, courses = 0, set()
+    for c in notes.list_courses():
+        course = notes.get_course(c["id"])
+        for d in (course or {}).get("docs", []):
+            if find_doc(d["name"]) and apply_to_document(c["id"], d, d["name"]):
+                applied += 1
+                courses.add(c["id"])
+    return {"id": pid, "ders": p.get("ders", ""), "belge": len(p["docs"]), "uygulanan": applied,
+            "dersler": sorted(courses)}
+
+
+def list_packs() -> list[dict]:
+    return [{"id": p["_id"], "ders": p.get("ders", ""), "kurs_kodu": p.get("kurs_kodu", ""), "belge": len(p["_docs"]),
+             "deneme": len(p.get("denemeler") or [])} for p in packs()]
 
 
 def course_guide(course: dict | None) -> str:

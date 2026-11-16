@@ -8,8 +8,10 @@ Klasör yapısı:
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -75,8 +77,34 @@ def doc_dir(course_id: str, doc_id: str) -> Path:
     return course_dir(course_id) / "belgeler" / _safe_id(doc_id)
 
 
+_RENDER_LOCK = threading.Lock()  # pdfium iş parçacığı güvenli değil
+
+
 def page_image_path(course_id: str, doc_id: str, page: int) -> Path:
-    return doc_dir(course_id, doc_id) / f"sayfa_{page:03d}.png"
+    """Sayfa görüntüsü; PDF sayfaları ilk istendiğinde üretilir (yükleme hızlı olsun diye)."""
+    d = doc_dir(course_id, doc_id)
+    out = d / f"sayfa_{page:03d}.png"
+    src = d / "kaynak.pdf"
+    if not out.exists() and src.exists() and page >= 1:
+        with _RENDER_LOCK:
+            if not out.exists():
+                _render_page(src, page, out)
+    return out
+
+
+def _render_page(pdf_path: Path, page: int, out: Path) -> None:
+    import pypdfium2 as pdfium
+
+    pdf = pdfium.PdfDocument(str(pdf_path))
+    try:  # hata olsa da dosya kilidi bırakılsın (Windows'ta klasör silinebilsin)
+        if page > len(pdf):
+            return
+        img = pdf[page - 1].render(scale=1.6).to_pil()
+        tmp = out.with_name(out.name + ".yeni")
+        img.save(tmp, format="PNG")
+        os.replace(tmp, out)
+    finally:
+        pdf.close()
 
 
 def add_document(course_id: str, filename: str, data: bytes) -> dict:
@@ -136,13 +164,12 @@ def _split_pdf(pdf_path: Path, out_dir: Path) -> list[dict]:
         except Exception:  # bozuk sayfa
             texts.append("")
 
-    pdf = pdfium.PdfDocument(str(pdf_path))
-    try:  # hata olsa da dosya kilidi bırakılsın (Windows'ta klasör silinebilsin)
-        for i in range(len(pdf)):
-            img = pdf[i].render(scale=1.6).to_pil()
-            img.save(out_dir / f"sayfa_{i + 1:03d}.png", optimize=True)
+    pdf = pdfium.PdfDocument(str(pdf_path))  # açılabildiğini denetle; sayfa görüntüleri istendikçe üretilir
+    try:
+        n = len(pdf)
     finally:
         pdf.close()
+    texts += [""] * (n - len(texts))
 
     pages = []
     for i, t in enumerate(texts):

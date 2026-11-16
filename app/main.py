@@ -98,6 +98,21 @@ async def delete_teacher_model():
     return {"ok": True}
 
 
+# ================================================================ hazır ders paketi (önceden işlenmiş notlar)
+@app.get("/api/hazir")
+async def list_hazir():
+    return hazir.list_packs()
+
+
+@app.post("/api/hazir")
+async def upload_hazir(file: UploadFile = File(...)):
+    data = await file.read()
+    try:
+        return await asyncio.to_thread(hazir.install_pack, data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 # ================================================================ telefondan erişim
 @app.get("/giris")
 async def login_page():
@@ -446,7 +461,7 @@ async def today_tasks(day: str = ""):
 
 @app.get("/api/courses/{course_id}/docs/{doc_id}/pages/{page}.png")
 async def page_image(course_id: str, doc_id: str, page: int):
-    p = notes.page_image_path(course_id, doc_id, page)
+    p = await asyncio.to_thread(notes.page_image_path, course_id, doc_id, page)
     if not p.exists():
         raise HTTPException(404)
     return FileResponse(p, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
@@ -464,7 +479,7 @@ def _schedule_ocr(course_id: str, doc: dict) -> None:
         async def one(n: int):
             async with sem:
                 try:
-                    png = notes.page_image_path(course_id, doc["id"], n).read_bytes()
+                    png = (await asyncio.to_thread(notes.page_image_path, course_id, doc["id"], n)).read_bytes()
                     text = await llm.ocr_page(png)
                     notes.set_page_text(course_id, doc["id"], n, text)
                 except Exception as e:  # tek sayfa hatası tüm belgeyi durdurmasın
@@ -609,7 +624,7 @@ async def ask(
         doc = notes.find_doc(course, doc_id)
         if doc and 1 <= page <= len(doc["pages"]):
             focus = (doc_id, page)
-            img = notes.page_image_path(course_id, doc_id, page)
+            img = await asyncio.to_thread(notes.page_image_path, course_id, doc_id, page)
             if img.exists():
                 content.append(llm.image_block(img.read_bytes(), "image/png"))
             ptxt = doc["pages"][page - 1].get("text", "")
