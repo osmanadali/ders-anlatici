@@ -76,7 +76,7 @@ async def teacher_model_info():
     if not glb:
         return {"exists": False}
     st = glb.stat()
-    return {"exists": True, "version": f"{int(st.st_mtime)}-{st.st_size}"}
+    return {"exists": True, "version": f"{int(st.st_mtime)}-{st.st_size}", "varsayilan": glb == VARSAYILAN_GLB}
 
 
 @app.api_route("/api/teacher-model", methods=["GET", "HEAD"])

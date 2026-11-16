@@ -224,7 +224,8 @@ export function mount({ root, board, teacher2d, onError }) {
     if (!info.exists) return;
     const { loadGlbRig } = await import("/static/teacher_glb.js");
     let flip = false;
-    try { flip = localStorage.getItem("ders.hocaCevir") === "1"; } catch {}
+    // uygulamayla gelen model doğru yöne bakar; çevirme yalnızca yüklenen modeller için
+    try { flip = !info.varsayilan && localStorage.getItem("ders.hocaCevir") === "1"; } catch {}
     const g = await loadGlbRig("/api/teacher-model?v=" + encodeURIComponent(info.version), { flip });
     g.root.position.copy(rig.root.position); g.root.rotation.copy(rig.root.rotation);
     scene.remove(rig.root); scene.add(g.root); rig = g;
