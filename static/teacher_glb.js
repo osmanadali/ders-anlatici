@@ -52,6 +52,24 @@ function findBones(model) {
   return { B, missing, count: bones.length };
 }
 
+// Sağ ele tebeşir: avuçta, parmak yönünde. Kemiğin ölçeği ne olursa olsun dünyada ~7 cm.
+function addChalk(hand) {
+  if (!hand) return;
+  hand.updateMatrixWorld(true);
+  const ws = hand.getWorldScale(new THREE.Vector3()).x || 1;
+  const finger = hand.children.find((c) => c.isBone || c.type === "Bone");
+  const dir = finger ? finger.position.clone() : new THREE.Vector3(0, 1, 0).multiplyScalar(0.08 / ws);
+  const len = dir.length() || 0.08 / ws;
+  dir.normalize();
+  const chalk = new THREE.Mesh(new THREE.CylinderGeometry(0.0075 / ws, 0.0075 / ws, 0.07 / ws, 8),
+                               new THREE.MeshStandardMaterial({ color: 0xf5f2e6, roughness: 0.9 }));
+  chalk.position.copy(dir).multiplyScalar(len * 0.85);
+  chalk.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  chalk.rotateX(1.1);  // parmaklar arasında, tahtaya doğru eğik
+  chalk.name = "tebesir";
+  hand.add(chalk);
+}
+
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _w = new THREE.Vector3();
 
 // Kemiği dünya koordinatındaki bir noktaya yönelt (dinlenme yönünü koruyarak)
@@ -119,6 +137,7 @@ export async function loadGlbRig(url, { flip = false } = {}) {
   const s = (HEIGHT * 0.86) / span;  // baş kemiği ~boyun %90'ında, ayak bileği ~%4'ünde
   model.scale.multiplyScalar(s);
   root.updateMatrixWorld(true);
+  addChalk(B.R.hand);
   const hp = B.hips ? B.hips.getWorldPosition(new THREE.Vector3()) : B.head.getWorldPosition(new THREE.Vector3());
   model.position.x -= hp.x; model.position.z -= hp.z;
   root.updateMatrixWorld(true);
