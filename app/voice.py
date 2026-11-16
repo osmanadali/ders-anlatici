@@ -158,6 +158,8 @@ async def speak(text: str, previous_text: str = "", next_text: str = "") -> byte
     if provider == "piper":
         return await asyncio.to_thread(_piper, text)
     if provider == "xtts":
+        if not VOICE_SAMPLE.exists():  # ses örneği hiç yüklenmemiş: sessiz kalma, doğal hazır sese geç
+            return await _edge_tts(text, s.get("edge_voice") or "tr-TR-AhmetNeural")
         return await asyncio.to_thread(_xtts, text)
     if provider == "browser":
         raise VoiceError("Tarayıcı sesi seçili; sunucu ses üretmiyor.")

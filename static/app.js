@@ -202,13 +202,14 @@
         while ((i = buf.indexOf("\n\n")) >= 0) {
           const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
           if (!chunk.startsWith("data: ")) continue;
-          handleEvent(JSON.parse(chunk.slice(6)));
+          try { handleEvent(JSON.parse(chunk.slice(6))); }
+          catch (err) { console.error("adım işlenemedi:", err, chunk.slice(0, 300)); }  // tek bozuk adım anlatımı kesmesin
         }
       }
     } catch (e) {
       if (e.name !== "AbortError") {
         dropEmptyBubble();
-        const offline = e instanceof TypeError;  // "Failed to fetch": sunucu kapalı / ulaşılamıyor
+        const offline = e instanceof TypeError && /fetch|network|load failed/i.test(e.message || "");  // gerçekten bağlantı yok
         addMsg("err", offline
           ? "Sunucuya ulaşılamadı. Siyah komut penceresi kapanmış olabilir: Ders Anlatici.bat ile yeniden aç. Sorun sürerse ders-anlatici/veri/sunucu.log dosyasını gönder."
           : "Hata: " + e.message);

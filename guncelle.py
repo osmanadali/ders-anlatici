@@ -95,7 +95,7 @@ def ensure_deps(log=print) -> bool:
     try:
         r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--disable-pip-version-check", "-r",
                             str(ROOT / "requirements.txt")], cwd=ROOT, creationflags=NO_WINDOW,
-                           capture_output=True, text=True, timeout=1200)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1200)
         _log(f"pip çıkış kodu {r.returncode}\n{(r.stdout or '')[-2000:]}\n{(r.stderr or '')[-4000:]}")
         ok = r.returncode == 0
     except Exception as e:  # zaman aşımı, pip yok vb.
