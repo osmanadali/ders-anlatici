@@ -2,7 +2,21 @@
 (function () {
   const $ = (s) => document.querySelector(s);
   const board = new Board($("#board"));
-  const teacher = new Teacher($("#teacher"));
+  const teacher2d = new Teacher($("#teacher"));
+  let teacher = teacher2d;
+  let teacher3d = null;
+  function webglOk() { try { return !!document.createElement("canvas").getContext("webgl2"); } catch { return false; } }
+  async function enable3D(on) {
+    if (on && !teacher3d && webglOk()) {
+      try {
+        const m = await import("/static/teacher3d.js");
+        teacher3d = m.mount({ root: $(".classroom"), board, teacher2d });
+        teacher = teacher3d;
+      } catch (e) { console.warn("3B sınıf açılamadı, 2B devam", e); toast("3B sınıf açılamadı, 2B hocayla devam ediliyor."); }
+    } else if (!on && teacher3d) {
+      teacher3d.destroy(); teacher3d = null; teacher = teacher2d;
+    }
+  }
   document.addEventListener("pointerdown", () => teacher.unlock(), { capture: true });
   document.addEventListener("keydown", () => teacher.unlock(), { capture: true });
   function teacherStatus(t) { $("#teacherStatus").textContent = t || ""; }
@@ -844,6 +858,7 @@
       $("#sampleStatus").textContent = o.sample ? "✔ Ses örneği kayıtlı" : "Henüz ses örneği yok";
     }).catch(() => {});
     $("#setWeb").checked = !!st.web_search;
+    $("#set3d").checked = localGet("hoca3d") !== "0";
     $("#setSens").value = localGet("sens") || "1";
     $("#settingsDlg").showModal();
     if (st.tts_provider !== "elevenlabs") return;
@@ -922,6 +937,8 @@
       web_search: $("#setWeb").checked,
     });
     localSet("sens", $("#setSens").value);
+    localSet("hoca3d", $("#set3d").checked ? "1" : "0");
+    enable3D($("#set3d").checked);
     if (S.conv) S.conv.sensitivity = Number($("#setSens").value);
     toast("Ayarlar kaydedildi.");
   };
@@ -952,5 +969,6 @@
 
   // ================================================================ başlat
   loadSettings().catch(() => {});
+  if (localGet("hoca3d") !== "0" && !matchMedia("(prefers-reduced-motion: reduce)").matches) enable3D(true);
   loadCourses().catch((e) => toast("Sunucuya bağlanılamadı: " + e.message));
 })();

@@ -228,3 +228,15 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   .tabs button { padding: 9px 9px; font-size: 13px; }
   .ask-form textarea { font-size: 16px; } /* iOS yakınlaştırmasın */
 }
+
+/* ---------------- 3B sınıf */
+.classroom.three { padding: 0; overflow: hidden; background: #d9cbb4; min-height: 440px; }
+.classroom.three > .teacher { display: none; }
+.classroom.three .layer-css, .classroom.three .layer-gl { position: absolute; inset: 0; }
+.classroom.three .layer-gl { pointer-events: none; }
+.classroom.three .board { margin: 0; flex: none; min-height: 0; }
+.wall3d { width: 1400px; height: 600px; background:
+  linear-gradient(#e2d6c2, #d4c4aa); box-shadow: inset 0 -40px 60px rgba(0,0,0,.08); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .wall3d { background: linear-gradient(#4a4238, #3b352d); } }
+:root[data-theme="dark"] .wall3d { background: linear-gradient(#4a4238, #3b352d); }
+@media (max-width: 900px) { .classroom.three { min-height: 62vh; } }
