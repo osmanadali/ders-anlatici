@@ -97,6 +97,29 @@ async def _warm_up():
         asyncio.get_running_loop().run_in_executor(None, voice.warm_whisper)
 
 
+LAST_PING = [0.0]  # uygulama penceresinden son "buradayım" zamanı (başlatıcı pencere kapanınca sunucuyu kapatır)
+
+
+@app.post("/api/ping")
+async def ping():
+    import time as _t
+
+    LAST_PING[0] = _t.time()
+    return {"ok": True}
+
+
+@app.get("/api/version")
+async def version():
+    import sys as _sys
+
+    if str(ROOT) not in _sys.path:
+        _sys.path.insert(0, str(ROOT))
+    import guncelle
+
+    st = guncelle.load_state()
+    return {"sha": (st.get("sha") or "")[:7], "message": st.get("message", ""), "updated": st.get("updated", 0)}
+
+
 @app.get("/api/status")
 async def status():
     return {"whisper": voice.WHISPER_STATE["state"], "whisper_detail": voice.WHISPER_STATE.get("detail", ""),

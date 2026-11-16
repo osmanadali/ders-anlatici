@@ -1020,6 +1020,17 @@
 
   // ================================================================ başlat
   loadSettings().catch(() => {});
+  // Masaüstü uygulaması: pencere açık olduğu sürece sunucuya "buradayım" de (kapanınca sunucu kendini kapatır)
+  const ping = () => fetch("/api/ping", { method: "POST" }).catch(() => {});
+  ping(); setInterval(ping, 20000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) ping(); });
+  // Güncellemeden sonraki ilk açılışta neyin yenilendiğini söyle
+  api("/api/version").then((v) => {
+    if (v.sha && localGet("seenVersion") !== v.sha) {
+      if (localGet("seenVersion")) toast("Uygulama güncellendi: " + v.message, 8000);
+      localSet("seenVersion", v.sha);
+    }
+  }).catch(() => {});
   // İlk açılış: hiç beyin anahtarı yoksa Ayarlar'ı aç
   api("/api/keys").then((k) => {
     if (!k.gemini && !k.anthropic) {

@@ -24,5 +24,8 @@ if errorlevel 1 (
   exit /b 1
 )
 echo.
-echo Kurulum tamam! Simdi "Ders Anlatici.bat" dosyasina cift tikla.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0kisayol.ps1"
+echo.
+echo Kurulum tamam! Masaustundeki "Ders Anlatici" simgesine cift tikla.
+echo (Uygulama her acilista guncellemeleri kendisi ceker.)
 pause

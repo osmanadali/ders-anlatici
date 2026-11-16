@@ -36,3 +36,10 @@ def test_keys_saved_live_and_local_only(monkeypatch, tmp_path):
     # uzaktan (telefon/tünel) anahtar girilemez
     monkeypatch.setenv("ERISIM_SIFRESI", "x")
     assert c.post("/api/keys", json={"gemini": "y"}, headers={"x-forwarded-for": "1.2.3.4"}).status_code in (401, 403)
+
+
+def test_ping_and_version():
+    c = TestClient(main.app)
+    assert c.post("/api/ping").json()["ok"] and main.LAST_PING[0] > 0
+    v = c.get("/api/version").json()
+    assert set(v) == {"sha", "message", "updated"}
