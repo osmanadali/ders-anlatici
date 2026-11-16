@@ -97,9 +97,16 @@ function twoBone(a, b, c, target, pole, k = 0.35, keep = null) {
   if (pv.lengthSq() < 1e-6) pv.set(0, -1, 0); else pv.normalize();
   const cosA = THREE.MathUtils.clamp((la * la + d * d - lb * lb) / (2 * la * d), -1, 1);
   let elbow = A.clone().addScaledVector(dir, la * cosA).addScaledVector(pv, la * Math.sqrt(1 - cosA * cosA));
-  if (keep) {  // dirsek gövdeye girmesin: dışarı it, kol uzunluğunu koru
-    elbow = keep(elbow);
-    elbow = A.clone().add(elbow.sub(A).setLength(la));
+  if (keep) {  // dirsek ve ön kol gövdeye girmesin: dışarı it, kol uzunluğunu koru
+    const H = A.clone().addScaledVector(dir, d);
+    for (let i = 0; i < 3; i++) {
+      elbow = keep(elbow);
+      elbow = A.clone().add(elbow.sub(A).setLength(la));
+      // ön kolun ortası (ve el tarafı) gövdedeyse dirseği o yönde dışarı taşı
+      const orta = elbow.clone().lerp(H, 0.5), itilmis = keep(orta.clone());
+      if (itilmis.distanceToSquared(orta) < 1e-6) break;
+      elbow.add(itilmis.sub(orta).multiplyScalar(2));
+    }
   }
   aim(a, b, elbow, k);
   aim(b, c, A.clone().addScaledVector(dir, d), k);
@@ -217,11 +224,15 @@ export async function loadGlbRig(url, { flip = false } = {}) {
         const merkez = ax.clone().addScaledVector(yon, t);
         const fark = pt.clone().sub(merkez);
         // yarıçap: kalça hizasında daha geniş (ceket/kalça), göğüste omuz genişliğine göre
+        // Kesit elips: yanlara r, önden arkaya r*0.6 (göğüs yanlara göre ince)
         const r = THREE.MathUtils.lerp(govde.rKalca, govde.rGogus, t / uz) + 0.035;
-        const d = fark.length();
-        if (d >= r) return pt;
-        if (d < 1e-4) fark.copy(rootDir(1, 0, 0)); 
-        return merkez.add(fark.setLength(r));
+        const ex = rootDir(1, 0, 0), ez = rootDir(0, 0, 1);
+        const fx = fark.dot(ex), fz = fark.dot(ez), rz = r * 0.6;
+        const e = Math.sqrt((fx / r) ** 2 + (fz / rz) ** 2);
+        if (e >= 1) return pt;
+        if (e < 1e-4) return merkez.addScaledVector(ez, rz);  // tam eksende: öne çıkar
+        const k = 1 / e;  // elipsin yüzeyine aynı yönde ölçekle
+        return pt.clone().addScaledVector(ex, fx * (k - 1)).addScaledVector(ez, fz * (k - 1));
       };
       const kol = (side, target, pole, k) => {
         const L = B[side];
@@ -231,8 +242,9 @@ export async function loadGlbRig(url, { flip = false } = {}) {
         kol("R", p.reachR, rootDir(0.3, -1, -0.5), 0.4);
         kol("L", relaxTarget("L", 0, 0), rootDir(0, -0.3, -1), 0.15);
       } else if (p.think) {
-        const chin = headObj.getWorldPosition(new THREE.Vector3()).add(rootDir(-0.02, -0.08, 0.12));
-        kol("R", chin, rootDir(0.2, -1, 0.2), 0.25);
+        // Çeneye el: el çenenin önünde, dirsek öne-aşağı ve hafif dışa (ön kol göğsün önünden geçer)
+        const chin = headObj.getWorldPosition(new THREE.Vector3()).add(rootDir(-0.02, -0.13, 0.2));
+        kol("R", chin, rootDir(-0.2, -1, 0.45), 0.25);
         kol("L", relaxTarget("L", 0, 0), rootDir(0, -0.3, -1), 0.15);
       } else {
         kol("R", relaxTarget("R", p.talkR, p.swing), rootDir(0, -0.3, -1), 0.15);
