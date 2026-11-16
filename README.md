@@ -27,9 +27,9 @@ Ayrıca: hoca karakteri (sese göre ağız hareketi, yazma/dinleme/düşünme po
 
 1. Python yoksa https://www.python.org/downloads/ adresinden kur. Kurulumun ilk ekranında **"Add python.exe to PATH"** kutusunu işaretlemeyi unutma.
 2. Zip'i bir klasöre çıkar, **Kurulum.bat** dosyasına çift tıkla (ilk seferde birkaç dakika sürer).
-3. **Ders Anlatıcı.bat** dosyasına çift tıkla. Açılan Ayarlar penceresine ücretsiz Gemini anahtarını yapıştır.
+3. **Ders Anlatici.bat** dosyasına çift tıkla. Açılan Ayarlar penceresine ücretsiz Gemini anahtarını yapıştır.
 
-Mac'te aynı adımlar **Kurulum.command** ve **Ders Anlatıcı.command** ile.
+Mac'te aynı adımlar **Kurulum.command** ve **Ders Anlatici.command** ile.
 
 ## Kurulum (elle)
 
@@ -50,7 +50,7 @@ Ses ve konuşma tanıma **varsayılan olarak ücretsizdir**, anahtar istemez: ho
 
 ## Çalıştırma
 
-**Masaüstü uygulaması gibi (önerilen):** Windows'ta `Ders Anlatıcı.bat`, Mac'te `Ders Anlatıcı.command` dosyasına çift tıkla (ya da `python baslat.py`). Uygulama adres çubuğu olmayan kendi penceresinde açılır; pencereyi kapatınca kapanır. Mikrofon izni bir kez verilir.
+**Masaüstü uygulaması gibi (önerilen):** Windows'ta `Ders Anlatici.bat`, Mac'te `Ders Anlatici.command` dosyasına çift tıkla (ya da `python baslat.py`). Uygulama adres çubuğu olmayan kendi penceresinde açılır; pencereyi kapatınca kapanır. Mikrofon izni bir kez verilir.
 
 **Tarayıcıda:**
 

@@ -3,7 +3,7 @@
 Sunucuyu arka planda başlatır ve Chrome/Edge'i adres çubuğu olmayan kendi penceresinde
 ("uygulama modu") açar. Pencere kapatılınca sunucu da kapanır.
 
-    python baslat.py            (Windows'ta "Ders Anlatıcı.bat" dosyasına çift tıkla)
+    python baslat.py            (Windows'ta "Ders Anlatici.bat" dosyasına çift tıkla)
     python baslat.py --telefon  telefondan da kullan: güvenli (HTTPS) bir adres ve şifre üretir, QR kodu gösterir
                                 (cloudflared kurulu olmalı: Windows "winget install Cloudflare.cloudflared",
                                  Mac "brew install cloudflared")
