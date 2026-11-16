@@ -114,3 +114,83 @@
 
   window.Conversation = Conversation;
 })();
+
+/* Tarayıcının kendi konuşma tanıması (Edge/Chrome): ücretsiz, anında, model indirmez.
+   Konuşmalı derste varsayılan budur; yoksa ya da hata verirse yukarıdaki Whisper yoluna geçilir. */
+(function () {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const norm = (t) => (t || "").toLocaleLowerCase("tr-TR").replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+
+  class BrowserConversation {
+    /* hooks: isTutorSpeaking(), tutorText() → hocanın şu an söylediği, onSpeechStart(), onText(text),
+              onFalseStart(), onLevel(level, state), onFail(reason) */
+    constructor(hooks) { this.hooks = hooks; this.active = false; this.sensitivity = 1; }
+    static available() { return !!SR; }
+
+    // Hoparlörden mikrofona sızan hoca sesi: duyulan kelimelerin çoğu hocanın cümlesindeyse yankıdır.
+    isEcho(text) {
+      const heard = norm(text);
+      if (!heard.length) return true;
+      const said = new Set(norm(this.hooks.tutorText?.() || ""));
+      if (!said.size) return false;
+      const hit = heard.filter((w) => said.has(w)).length;
+      return hit / heard.length >= 0.6;
+    }
+
+    async start() {
+      if (!SR) throw new Error("Bu tarayıcıda konuşma tanıma yok");
+      this.active = true;
+      this.speaking = false;
+      this._fails = 0;
+      this._spin();
+    }
+
+    _spin() {
+      if (!this.active) return;
+      const r = new SR();
+      r.lang = "tr-TR";
+      r.continuous = true;
+      r.interimResults = true;
+      r.maxAlternatives = 1;
+      this.rec = r;
+      r.onresult = (ev) => {
+        this._fails = 0;
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const res = ev.results[i], text = res[0].transcript.trim();
+          if (!text) continue;
+          const tutor = this.hooks.isTutorSpeaking();
+          const words = norm(text).length;
+          if (!res.isFinal) {
+            // Söz kesme: hoca konuşurken en az 2 kelime (yankı değilse) → hemen sus
+            if (!this.speaking && (!tutor || (words >= 2 / this.sensitivity && !this.isEcho(text)))) {
+              this.speaking = true;
+              this.hooks.onSpeechStart?.();
+            }
+            this.hooks.onLevel?.(0.8, "speaking");
+            continue;
+          }
+          this.hooks.onLevel?.(0, "idle");
+          const wasSpeaking = this.speaking;
+          this.speaking = false;
+          if ((tutor || wasSpeaking) && this.isEcho(text)) { this.hooks.onFalseStart?.(); continue; }
+          if (norm(text).join("").length < 2) { this.hooks.onFalseStart?.(); continue; }
+          this.hooks.onText?.(text);
+        }
+      };
+      r.onerror = (e) => {
+        if (e.error === "no-speech" || e.error === "aborted") return;
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") { this.active = false; this.hooks.onFail?.("Mikrofon izni verilmedi."); return; }
+        if (e.error === "network" || ++this._fails > 3) { this.active = false; this.hooks.onFail?.("Tarayıcının konuşma tanıması çalışmadı (" + e.error + ")."); }
+      };
+      r.onend = () => { if (this.active) setTimeout(() => this._spin(), 150); };  // tarayıcı sessizlikte durdurur: yeniden başlat
+      try { r.start(); } catch (e) { setTimeout(() => this._spin(), 500); }
+    }
+
+    stop() {
+      this.active = false;
+      try { this.rec?.abort(); } catch {}
+    }
+  }
+
+  window.BrowserConversation = BrowserConversation;
+})();

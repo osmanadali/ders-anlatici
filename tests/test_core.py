@@ -122,3 +122,39 @@ def test_session_roundtrip():
     assert store.load_session(s["id"])["timeline"][0]["say"] == "a"
     assert any(r["id"] == s["id"] and r["steps"] == 1 for r in store.list_sessions())
     json.dumps(store.list_sessions())
+
+
+# ---------------------------------------------------------------- farklı model çıktı biçimleri (Gemini vb.)
+def _parse_all(text, chunk=5):
+    p = StepParser()
+    out = []
+    for i in range(0, len(text), chunk):
+        out += p.feed(text[i : i + chunk])
+    out += p.flush()
+    return [s for o in out if (s := normalize_step(o))]
+
+
+def test_parser_json_array_one_line():
+    steps = _parse_all('[{"say": "bir", "board": []}, {"say": "iki", "board": []}]')
+    assert [s["say"] for s in steps] == ["bir", "iki"]
+
+
+def test_parser_json_array_multiline_with_commas():
+    text = '```json\n[\n  {"say": "bir", "board": [{"op": "write", "text": "a"}]},\n  {"say": "iki", "board": []}\n]\n```'
+    assert [s["say"] for s in _parse_all(text)] == ["bir", "iki"]
+
+
+def test_parser_pretty_printed_objects():
+    text = '{\n  "say": "bir",\n  "board": [\n    {"op": "title", "text": "T"}\n  ]\n},\n{\n  "say": "iki",\n  "board": []\n}\n'
+    steps = _parse_all(text)
+    assert [s["say"] for s in steps] == ["bir", "iki"] and steps[0]["board"][0]["op"] == "title"
+
+
+def test_parser_wrapped_steps_object():
+    steps = _parse_all('{"steps": [{"say": "bir", "board": []}, {"say": "iki", "board": []}]}')
+    assert [s["say"] for s in steps] == ["bir", "iki"]
+
+
+def test_parser_markdown_prose_still_speaks():
+    steps = _parse_all("**Merhaba!** Bugün limit konusuna başlıyoruz.\nÖnce tanımı yazalım.")
+    assert steps[0]["say"] == "Merhaba! Bugün limit konusuna başlıyoruz." and len(steps) == 2

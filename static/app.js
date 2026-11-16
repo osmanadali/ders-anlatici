@@ -190,6 +190,7 @@
       case "step": player.enqueue(ev); break;
       case "memory": toast(`Not aldım: “${ev.topic}” konusunu tekrar edeceğiz.`); break;
       case "notice": toast(ev.message); break;
+      case "stage": $("#caption").textContent = ev.message; teacherStatus(ev.message); break;
       case "status": {
         $("#caption").textContent = ev.message;
         // Düşünme süresini doğal bir ana çevir: hoca "bir bakayım" der ve düşünme pozuna geçer.
@@ -333,8 +334,9 @@
       return;
     }
     teacher.unlock();
-    const conv = new Conversation({
+    const hooks = {
       isTutorSpeaking: () => player.state === "playing",
+      tutorText: () => player.currentSay,
       onSpeechStart() {
         if (player.state === "playing") { player.pause(); S.convPaused = true; }
         teacher.setState("listening");
@@ -344,19 +346,24 @@
         if (S.convPaused) { S.convPaused = false; player.resume(); }
         else if (!player.busy) teacher.setState(S.streamOpen ? "thinking" : "listening");
       },
+      onText(text) {
+        S.convPaused = false;
+        const files = S.attachments; S.attachments = []; renderAttachments();
+        ask({ text, files });
+      },
       async onUtterance(wav) {
-        teacherStatus("Anlamaya çalışıyorum…");
+        const st = await api("/api/status").catch(() => ({}));
+        teacherStatus(st.whisper === "hazırlanıyor"
+          ? "Konuşma tanıma modeli ilk kez hazırlanıyor (~1.6 GB, bir kez)…" : "Anlamaya çalışıyorum…");
         try {
           const fd = new FormData();
           fd.append("file", wav, "soru.wav");
           const { text } = await api("/api/stt", { method: "POST", body: fd });
-          if (!text || text.replace(/[^\p{L}\p{N}]/gu, "").length < 2) { this.onFalseStart(); teacherStatus("Seni dinliyorum…"); return; }
-          S.convPaused = false;
-          const files = S.attachments; S.attachments = []; renderAttachments();
-          ask({ text, files });
+          if (!text || text.replace(/[^\p{L}\p{N}]/gu, "").length < 2) { hooks.onFalseStart(); teacherStatus("Seni dinliyorum…"); return; }
+          hooks.onText(text);
         } catch (e) {
           toast("Ses anlaşılamadı: " + e.message);
-          this.onFalseStart();
+          hooks.onFalseStart();
         }
       },
       onLevel(level, state) {
@@ -364,7 +371,16 @@
         m.firstElementChild.style.width = Math.round(level * 100) + "%";
         m.classList.toggle("speaking", state === "speaking");
       },
-    });
+      onFail(reason) {
+        // Tarayıcı tanıması çalışmadı → ücretsiz Whisper'a geç
+        toast(reason + " Bilgisayardaki Whisper'a geçiyorum.", 7000);
+        localSet("convStt", "whisper");
+        if (S.conv) { S.conv.stop(); S.conv = null; }
+        toggleConversation();
+      },
+    };
+    const useBrowser = window.BrowserConversation?.available() && localGet("convStt") !== "whisper";
+    const conv = useBrowser ? new BrowserConversation(hooks) : new Conversation(hooks);
     try { await conv.start(); }
     catch (e) { toast("Mikrofon açılamadı: " + e.message); return; }
     conv.sensitivity = Number(localGet("sens") || 1);
@@ -877,6 +893,7 @@
     }).catch(() => {});
     $("#setWeb").checked = !!st.web_search;
     $("#set3d").checked = localGet("hoca3d") !== "0";
+    $("#setConvStt").value = localGet("convStt") === "whisper" || !window.BrowserConversation?.available() ? "whisper" : "browser";
     ["keyGemini", "keyAnthropic", "keyEleven"].forEach((id) => ($("#" + id).value = ""));
     api("/api/keys").then((k) => {
       $("#keyGemini").placeholder = k.gemini ? `kayıtlı: ${k.gemini}` : "AIza… ile başlar";
@@ -971,6 +988,7 @@
     });
     localSet("sens", $("#setSens").value);
     localSet("hoca3d", $("#set3d").checked ? "1" : "0");
+    localSet("convStt", $("#setConvStt").value);
     enable3D($("#set3d").checked);
     if (S.conv) S.conv.sensitivity = Number($("#setSens").value);
     toast("Ayarlar kaydedildi.");

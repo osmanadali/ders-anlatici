@@ -6,6 +6,7 @@ from pathlib import Path
 # Testler gerçek veri klasörüne dokunmasın, API anahtarı gerekmesin.
 os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="ders_test_")
 os.environ.setdefault("ANTHROPIC_API_KEY", "test")
+os.environ["DERS_ON_YUKLEME"] = "0"  # testlerde Whisper modelini indirme
 os.environ.setdefault("ELEVENLABS_API_KEY", "test")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 

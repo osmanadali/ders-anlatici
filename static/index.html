@@ -240,6 +240,12 @@
     </label>
     <label class="check"><input id="set3d" type="checkbox"> 3B sınıf ve hoca (kapalıysa 2B çizim; eski bilgisayarda kapat)</label>
     <label class="check"><input id="setWeb" type="checkbox"> Gerekirse internette araştırabilsin (daha yavaş)</label>
+    <label>Konuşmalı derste konuşma tanıma
+      <select id="setConvStt">
+        <option value="browser">Tarayıcı: anında, ücretsiz (önerilen)</option>
+        <option value="whisper">Whisper: bilgisayarımda, internetsiz</option>
+      </select>
+    </label>
     <label>Konuşmalı modda mikrofon hassasiyeti
       <input id="setSens" type="range" min="0.6" max="1.6" step="0.1" value="1">
     </label>

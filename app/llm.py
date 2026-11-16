@@ -97,31 +97,61 @@ class StepParser:
             self.pending = joined
             if obj is not None:
                 self.pending = ""
-                return [obj]
+                return _expand(obj)
             if len(self.pending) > 8000:  # umutsuz: düz metin olarak oku
                 p, self.pending = self.pending, ""
                 return self._fallback(p)
             return []
+        if not s.strip("[],; \t"):
+            return []  # nesne dışında tek başına köşeli parantez/virgül satırı
+        if s.startswith("[") and s.endswith("]"):
+            arr = _try_any(s)  # bazı modeller tüm adımları tek bir JSON dizisi olarak yazar
+            if isinstance(arr, list):
+                return [x for o in arr if isinstance(o, dict) for x in _expand(o)]
+        if s.startswith("["):
+            s = s[1:].strip()  # "[{...}," gibi dizinin ilk satırı
+            if not s:
+                return []
         if s.startswith("{"):
             obj = _try_json(s)
             if obj is not None:
-                return [obj]
+                return _expand(obj)
             self.pending = s
             return []
         return self._fallback(s)
 
     @staticmethod
     def _fallback(text: str) -> list[dict]:
-        text = text.strip().lstrip("-*# ").strip()
+        text = text.strip().lstrip("-*# ").replace("**", "").strip()
         return [{"say": text, "board": [{"op": "write", "text": text}]}] if text else []
 
 
-def _try_json(s: str) -> dict | None:
+def _try_any(s: str):
     try:
-        obj = json.loads(s)
+        return json.loads(s)
     except json.JSONDecodeError:
         return None
-    return obj if isinstance(obj, dict) else None
+
+
+def _expand(obj: dict) -> list[dict]:
+    """{"steps": [...]} gibi sarmalanmış çıktıları adımlara açar."""
+    if any(k in obj for k in ("say", "board", "memory")):
+        return [obj]
+    for v in obj.values():
+        if isinstance(v, list) and v and all(isinstance(x, dict) for x in v):
+            return [x for o in v for x in _expand(o)]
+    return [obj]
+
+
+def _try_json(s: str) -> dict | None:
+    s = s.strip()
+    for cand in (s, s.rstrip(",").rstrip(), s.rstrip(",").rstrip().removesuffix("]").rstrip()):
+        try:
+            obj = json.loads(cand)
+        except json.JSONDecodeError:
+            continue
+        return obj if isinstance(obj, dict) else None
+    return None
 
 
 def normalize_step(obj: dict) -> dict | None:

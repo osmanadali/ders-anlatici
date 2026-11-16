@@ -312,6 +312,28 @@ def save_voice_sample(data: bytes, filename: str) -> float:
 # ---------------------------------------------------------------- Whisper (ücretsiz yerel STT)
 _whisper_models: dict = {}
 _whisper_lock = threading.Lock()
+WHISPER_STATE = {"state": "beklemede", "detail": ""}  # beklemede | hazırlanıyor | hazır | hata
+
+
+def _whisper_model():
+    from faster_whisper import WhisperModel
+
+    size = load_settings().get("whisper_model", "large-v3-turbo")
+    model = _whisper_models.get(size)
+    if model is None:
+        WHISPER_STATE.update(state="hazırlanıyor", detail=size)
+        model = WhisperModel(size, device="auto", compute_type="int8")
+        _whisper_models[size] = model
+        WHISPER_STATE.update(state="hazır", detail=size)
+    return model
+
+
+def warm_whisper() -> None:
+    try:
+        with _whisper_lock:
+            _whisper_model()
+    except Exception as e:  # indirme/kurulum hatası: kullanıcıya durum ekranında görünür
+        WHISPER_STATE.update(state="hata", detail=str(e)[:300])
 
 
 def _whisper(audio: bytes, filename: str = "", long_form: bool = False) -> str:
@@ -321,12 +343,8 @@ def _whisper(audio: bytes, filename: str = "", long_form: bool = False) -> str:
         raise VoiceError("Konuşma tanıma paketi eksik: pip install -r requirements.txt") from e
     import io
 
-    size = load_settings().get("whisper_model", "large-v3-turbo")
     with _whisper_lock:
-        model = _whisper_models.get(size)
-        if model is None:
-            model = WhisperModel(size, device="auto", compute_type="int8")
-            _whisper_models[size] = model
+        model = _whisper_model()
         segments, _ = model.transcribe(io.BytesIO(audio), language="tr", vad_filter=True,
                                        beam_size=5 if long_form else 1)
         return " ".join(seg.text.strip() for seg in segments).strip()

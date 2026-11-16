@@ -89,6 +89,14 @@ def add_document(course_id: str, filename: str, data: bytes) -> dict:
     d = doc_dir(course_id, doc_id)
     d.mkdir(parents=True, exist_ok=True)
 
+    try:
+        return _add_document(course, course_id, filename, data, ext, doc_id, d)
+    except Exception:
+        shutil.rmtree(d, ignore_errors=True)  # yarım kalan belge klasörünü bırakma
+        raise
+
+
+def _add_document(course: dict, course_id: str, filename: str, data: bytes, ext: str, doc_id: str, d: Path) -> dict:
     pages: list[dict] = []
     if ext == ".pdf":
         (d / "kaynak.pdf").write_bytes(data)

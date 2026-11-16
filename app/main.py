@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import hashlib
 import json
 import logging
@@ -86,6 +87,20 @@ async def get_settings():
 @app.post("/api/settings")
 async def post_settings(patch: dict):
     return save_settings(patch)
+
+
+# ---------------------------------------------------------------- hazırlık durumu
+@app.on_event("startup")
+async def _warm_up():
+    """Ücretsiz konuşma tanıma (Whisper) modelini açılışta arka planda hazırla (ilk seferde ~1.6 GB iner)."""
+    if load_settings().get("stt_provider") == "whisper" and os.getenv("DERS_ON_YUKLEME", "1") != "0":
+        asyncio.get_running_loop().run_in_executor(None, voice.warm_whisper)
+
+
+@app.get("/api/status")
+async def status():
+    return {"whisper": voice.WHISPER_STATE["state"], "whisper_detail": voice.WHISPER_STATE.get("detail", ""),
+            "brain": llm.provider()}
 
 
 @app.get("/api/keys")
@@ -192,6 +207,9 @@ async def upload_doc(course_id: str, file: UploadFile = File(...)):
         raise HTTPException(404, "Ders bulunamadı")
     except ValueError as e:
         raise HTTPException(400, str(e))
+    except Exception as e:  # ör. eksik paket, bozuk PDF: sebebi kullanıcıya ve log'a yaz
+        log.exception("not yüklenemedi: %s", file.filename)
+        raise HTTPException(500, f"{type(e).__name__}: {e}")
     _schedule_ocr(course_id, doc)
     return doc
 
@@ -572,16 +590,18 @@ async def ask(
         prev_say = ""
         send = messages
         try:
+            brain = "Gemini" if llm.provider() == "gemini" else "Claude"
             if deep:
                 # Önce gerekçeli tam çözüm (öğrenciye gösterilmez), sonra hoca bunu izleyerek anlatır.
                 yield _sse({"type": "status", "message": "Soruyu önce kendi kendime çözüyorum…"})
                 try:
-                    draft = await llm.deep_solution(system, content)
+                    draft = await asyncio.wait_for(llm.deep_solution(system, content), DEEP_TIMEOUT)
                     send = messages[:-1] + [{"role": "user", "content": content + [
                         {"type": "text", "text": f"<cozum_taslagi>\n{draft}\n</cozum_taslagi>"}]}]
-                except llm.TutorError as e:
-                    log.warning("derin çözüm atlandı: %s", e)
-            async for item in llm.stream_steps(system, send):
+                except (llm.TutorError, asyncio.TimeoutError) as e:
+                    log.warning("derin çözüm atlandı: %s", e or "süre aşımı")
+            yield _sse({"type": "stage", "message": f"Hoca düşünüyor ({brain})…"})
+            async for item in _with_timeouts(llm.stream_steps(system, send), brain):
                 if "notice" in item:
                     yield _sse({"type": "notice", "message": item["notice"]})
                     continue
@@ -647,6 +667,31 @@ async def curriculum_import(body: ImportBody):
         return curriculum.import_courses(body.program, body.codes)
     except KeyError:
         raise HTTPException(404, "Program bulunamadı")
+
+
+FIRST_STEP_TIMEOUT = 120  # sn: ilk adım bu sürede gelmezse kullanıcıya açık hata
+NEXT_STEP_TIMEOUT = 90
+DEEP_TIMEOUT = 90
+
+
+async def _with_timeouts(agen, brain: str):
+    """Model takılırsa sonsuza dek beklemek yerine anlaşılır bir hata verir."""
+    first = True
+    it = agen.__aiter__()
+    while True:
+        try:
+            item = await asyncio.wait_for(it.__anext__(), FIRST_STEP_TIMEOUT if first else NEXT_STEP_TIMEOUT)
+        except StopAsyncIteration:
+            return
+        except asyncio.TimeoutError:
+            await agen.aclose()
+            raise llm.TutorError(
+                f"{brain} {FIRST_STEP_TIMEOUT if first else NEXT_STEP_TIMEOUT} saniyedir cevap vermedi. "
+                "İnternet bağlantını kontrol edip tekrar dene; sürerse Ayarlar'dan başka bir model seç."
+            )
+        if "say" in item:
+            first = False
+        yield item
 
 
 def _wants_deep(settings: dict, mode: str, style: str, text: str, attachments: list, page: bool) -> bool:
