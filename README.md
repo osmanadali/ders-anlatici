@@ -205,3 +205,12 @@ pytest
 ## Maliyet notu
 
 Hiçbir şey ücretli değildir: yapay zeka, ses ve konuşma tanıma bilgisayarında çalışır. Tek bedel ilk kurulumdaki indirme (~8 GB) ve bilgisayarın işlemci/ekran kartı gücüdür.
+
+## 🏭 Mühendis hoca
+
+Hoca yalnızca anlatmakla kalmaz, bir endüstri mühendisi gibi **hesap yapar**. Küçük yerel model sayı uydurabildiği için sayılar gerçek araçlardan gelir:
+
+- **Hesap araçları (`app/hesap.py`, internetsiz):** doğrusal/tam sayılı programlama (gölge fiyatlarla), ulaştırma, atama, Johnson/SPT/EDD çizelgeleme, CPM/PERT, EOQ ve emniyet stoku, M/M/1 ve M/M/c (Erlang C), kuyruk benzetimi, X̄-R/p/c kontrol kartları, Cp/Cpk, t-testi ve güven aralığı, öğrenme eğrisi, başabaş, NBD/İGO ve MRP patlatma (L4L, sabit parti, EOQ, Silver-Meal, Wagner-Whitin). Sohbette sayı içeren bir mühendislik problemi sorulunca model uygun aracı ve girdileri seçer, hesap çalışır, sonuç adımlarıyla hocaya verilir ve sohbette "🧮 Hesaplandı: …" rozeti görünür. Ayarlardan kapatılabilir (`hesap_araclari`).
+- **Bilgi haritası (🗺, Kütüphane sekmesi):** IISE bilgi alanları ile ERP, yalın, Altı Sigma, Endüstri 4.0 gibi sektör konuları; her konu için kütüphanedeki ilgili parça sayısı ve zayıf alanlar. Literatür taraması zayıf konular için İngilizce ek sorgu üretir. (`GET /api/bilgi-haritasi`)
+- **ERP rehberleri:** `app/hazir_bilgi/` altındaki 7 kısa Türkçe rehber (ERP, P2P/O2C, MPS/MRP, ana veri, SAP/Odoo/ERPNext eşlemesi, stok ve maliyet, uygulama projesi) ilk açılışta kütüphaneye bir kez eklenir.
+- **🏭 ERP alıştırması (Sınav sekmesi):** rastgele BOM + ana üretim çizelgesi senaryosu; net ihtiyaç tablosunu doldurursun, MRP aracı hücre hücre kontrol eder, "Hocaya anlat" ile sohbette açıklatabilirsin. (`GET /api/erp-alistirma`, `POST /api/erp-alistirma/kontrol`)

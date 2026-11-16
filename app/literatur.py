@@ -146,6 +146,20 @@ def _konu_temizle(t: str) -> str:
     return re.sub(r"\s+", " ", t).strip(" .-()")
 
 
+HARITA_TUR_SORGU = 2  # bir taramada bilgi haritasındaki zayıf düğümlerden en fazla bu kadar ek sorgu
+
+
+def harita_sorgulari(en_fazla: int = HARITA_TUR_SORGU) -> list[str]:
+    """Bilgi haritasında kütüphanede zayıf kalan konuların İngilizce sorguları (hata olursa boş)."""
+    try:
+        from . import bilgi_haritasi
+
+        return bilgi_haritasi.zayif_sorgular(en_fazla)
+    except Exception as e:
+        log.warning("bilgi haritası sorguları üretilemedi: %s", e)
+        return []
+
+
 def sorgular(profil: dict) -> list[str]:
     """Ders başına 2-4 sorgu: ders adı + en bilgi verici 1-2 haftalık konu (İngilizce)."""
     ad = re.sub(r"\s+", " ", (profil.get("ad_en") or "")).strip().lower()
@@ -408,7 +422,7 @@ def durum() -> dict:
 
 
 async def _ders_tara(client, c: dict, bugun: date, durum_d: dict, rapor: dict, kapali: set, gorulen: set,
-                     pdf_sayac: list, anahtar: str) -> int:
+                     pdf_sayac: list, anahtar: str, ek_sorgu: list[str] | None = None) -> int:
     kut = _kutuphane()
     p = c["profile"]
     kod = _ders_kodu(c)
@@ -420,7 +434,7 @@ async def _ders_tara(client, c: dict, bugun: date, durum_d: dict, rapor: dict, k
     except (OverflowError, OSError, ValueError):
         baslangic = date(bugun.year - YIL_PENCERESI, 1, 1)
     adaylar: dict[str, dict] = {}
-    qs = sorgular(p)
+    qs = sorgular(p) + [q for q in (ek_sorgu or []) if q not in sorgular(p)]
     for i, q in enumerate(qs):
         kaynaklar = [("crossref", lambda q=q: _crossref(client, q, baslangic, bugun))]
         if i == 0:  # arXiv ve OpenAlex yalnızca ders adıyla (yardımcı kaynak, hafif kullanım)
@@ -585,12 +599,14 @@ async def guncelle(zorla: bool = False) -> dict:
         ders_son = dict(d.get("ders_son") or {})
         async with httpx.AsyncClient(headers={"User-Agent": UA}, timeout=35, follow_redirects=True,
                                      transport=_transport) as client:
+            ek = harita_sorgulari() if secilen else []
             for c in secilen:
                 if {"crossref", "arxiv"} <= kapali:
                     break  # internet yok/kaynaklar kapalı: boşuna dönme
                 try:
                     rapor["yeni"] += await _ders_tara(client, c, bugun, {"ders_son": ders_son}, rapor, kapali,
-                                                      gorulen, pdf_sayac, anahtar)
+                                                      gorulen, pdf_sayac, anahtar, ek_sorgu=ek)
+                    ek = []  # ek sorgular turda yalnızca bir derse eklenir
                 except Exception as e:
                     log.warning("ders taranamadı %s: %s", _ders_kodu(c), e)
                     rapor["hatalar"].append(f"{_ders_kodu(c)}: {e}")

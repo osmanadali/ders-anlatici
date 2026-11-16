@@ -527,3 +527,22 @@ async def deep_solution(system: list[dict], user_content: list[dict]) -> str:
         f"Sonuç: {sol.sonuc}", f"Kontrol: {sol.kontrol}", f"Sık hatalar: {sol.sik_hatalar}", f"Püf noktası: {sol.puf_noktasi}",
     ]
     return "\n".join(lines)
+
+
+class HesapSecimi(BaseModel):
+    arac: str = Field(description="hesap aracının adı ya da 'yok'")
+    girdiler_json: str = Field("{}", description="araç girdileri: JSON nesnesinin metni")
+
+
+async def hesap_secimi(soru: str) -> dict | None:
+    """Soruya uyan hesap aracını ve girdilerini seçtirir; uygun araç yoksa None."""
+    from . import hesap
+
+    sec = await _parse(HesapSecimi, prompts.HESAP_SEC.format(araclar=hesap.arac_listesi_metni(), soru=soru[:2500]))
+    ad = (getattr(sec, "arac", "") or "").strip()
+    if not ad or ad.lower() == "yok" or ad not in hesap.ARACLAR:
+        return None
+    girdi = getattr(sec, "girdiler_json", None)
+    if girdi is None:
+        girdi = getattr(sec, "girdiler", {})
+    return {"arac": ad, "girdiler": girdi}

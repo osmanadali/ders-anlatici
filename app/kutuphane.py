@@ -1085,3 +1085,34 @@ def kaynak_metni(sonuclar: list[dict], butce: int) -> str:
         parcalar.append(bas + metin)
         kalan -= len(bas) + len(metin) + 2
     return "\n\n".join(parcalar)[:butce]
+
+
+def ifade_say(ifadeler: list[str], en_fazla: int = 200) -> int:
+    """Verilen ifadelerden (tam ifade eşleşmesi) herhangi birini içeren, hazır kaynaklardaki parça sayısı."""
+    q = []
+    for f in ifadeler:
+        tok = [t for t in re.findall(r"\w+", katla(f)) if t]
+        if tok:
+            q.append('"' + " ".join(tok) + '"')
+    if not q:
+        return 0
+    with _kilit:
+        c = _db()
+        try:
+            if _fts_var:
+                return int(c.execute(
+                    "SELECT COUNT(*) FROM (SELECT f.rowid FROM fts f JOIN parcalar p ON p.id=f.rowid "
+                    "JOIN kaynaklar k ON k.id=p.kaynak_id WHERE fts MATCH ? AND k.durum='hazir' LIMIT ?)",
+                    (" OR ".join(q), en_fazla)).fetchone()[0])
+        except sqlite3.OperationalError:
+            log.warning("FTS ifade sorgusu çalışmadı: %r", q)
+            return 0
+        n = 0
+        ifs = [katla(f) for f in ifadeler if f.strip()]
+        for r in c.execute("SELECT p.metin FROM parcalar p JOIN kaynaklar k ON k.id=p.kaynak_id WHERE k.durum='hazir'"):
+            m = katla(r[0])
+            if any(i in m for i in ifs):
+                n += 1
+                if n >= en_fazla:
+                    break
+        return n

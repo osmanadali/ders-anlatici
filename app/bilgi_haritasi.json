@@ -1,0 +1,1553 @@
+{
+ "surum": 1,
+ "not": "Düğümde 'dersler'/'kaynaklar' yoksa alanınkiler geçerlidir.",
+ "alanlar": [
+  {
+   "id": "is_tasarimi",
+   "ad": "İş Tasarımı ve Ölçümü",
+   "ad_en": "Work Design & Measurement",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 324",
+    "ENM 323",
+    "ENM 381"
+   ],
+   "kaynaklar": [
+    "Niebel's Methods, Standards, and Work Design (Freivalds)",
+    "Çalışma Etüdü (Genel kaynak)"
+   ],
+   "konular": [
+    {
+     "id": "zaman_etudu",
+     "ad": "Zaman etüdü ve standart zaman",
+     "ad_en": "Time study and standard time",
+     "anahtar": [
+      "zaman etüdü",
+      "standart zaman",
+      "performans derecelendirme",
+      "time study",
+      "standard time",
+      "work sampling",
+      "iş örneklemesi"
+     ]
+    },
+    {
+     "id": "yontem_etudu",
+     "ad": "Yöntem etüdü ve hareket ekonomisi",
+     "ad_en": "Method study and motion economy",
+     "anahtar": [
+      "yöntem etüdü",
+      "akış diyagramı",
+      "hareket ekonomisi",
+      "method study",
+      "motion study",
+      "process chart",
+      "therblig"
+     ]
+    },
+    {
+     "id": "onceden_belirlenmis",
+     "ad": "Önceden belirlenmiş zamanlar (MTM)",
+     "ad_en": "Predetermined time systems",
+     "anahtar": [
+      "MTM",
+      "predetermined motion time",
+      "MOST",
+      "önceden belirlenmiş zaman"
+     ]
+    },
+    {
+     "id": "verimlilik",
+     "ad": "Verimlilik ve ölçümü",
+     "ad_en": "Productivity measurement",
+     "anahtar": [
+      "verimlilik",
+      "üretkenlik",
+      "productivity",
+      "productivity measurement",
+      "performans göstergesi",
+      "OEE"
+     ],
+     "dersler": [
+      "ENM 381"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "yoneylem",
+   "ad": "Yöneylem Araştırması",
+   "ad_en": "Operations Research",
+   "grup": "IISE",
+   "dersler": [
+    "IE 202",
+    "ENM 305",
+    "ENM 306",
+    "ENM 450",
+    "ENM 479",
+    "ENM 480",
+    "ENM 481"
+   ],
+   "kaynaklar": [
+    "Hillier & Lieberman: Introduction to Operations Research",
+    "Taha: Operations Research: An Introduction",
+    "Winston: Operations Research"
+   ],
+   "konular": [
+    {
+     "id": "dogrusal_prog",
+     "ad": "Doğrusal programlama ve simpleks",
+     "ad_en": "Linear programming and simplex",
+     "anahtar": [
+      "doğrusal programlama",
+      "simpleks",
+      "dualite",
+      "duyarlılık analizi",
+      "linear programming",
+      "simplex",
+      "duality",
+      "sensitivity analysis",
+      "shadow price"
+     ],
+     "dersler": [
+      "IE 202",
+      "ENM 305"
+     ]
+    },
+    {
+     "id": "tamsayili",
+     "ad": "Tamsayılı ve birleşimsel eniyileme",
+     "ad_en": "Integer and combinatorial optimization",
+     "anahtar": [
+      "tamsayılı programlama",
+      "dal sınır",
+      "birleşimsel eniyileme",
+      "integer programming",
+      "branch and bound",
+      "combinatorial optimization"
+     ],
+     "dersler": [
+      "ENM 305",
+      "ENM 479"
+     ]
+    },
+    {
+     "id": "ag_modelleri",
+     "ad": "Ağ modelleri, ulaştırma ve atama",
+     "ad_en": "Network models, transportation, assignment",
+     "anahtar": [
+      "ulaştırma problemi",
+      "atama problemi",
+      "en kısa yol",
+      "maksimum akış",
+      "transportation problem",
+      "assignment problem",
+      "shortest path",
+      "max flow",
+      "minimum spanning tree"
+     ],
+     "dersler": [
+      "IE 202",
+      "ENM 305"
+     ]
+    },
+    {
+     "id": "stokastik",
+     "ad": "Olasılıksal modeller: Markov, kuyruk",
+     "ad_en": "Stochastic models: Markov, queueing",
+     "anahtar": [
+      "markov zinciri",
+      "kuyruk teorisi",
+      "kuyruk modeli",
+      "markov chain",
+      "queueing theory",
+      "M/M/1",
+      "Erlang",
+      "birth-death"
+     ],
+     "dersler": [
+      "ENM 306"
+     ]
+    },
+    {
+     "id": "karar_analizi",
+     "ad": "Karar analizi ve oyun teorisi",
+     "ad_en": "Decision analysis and game theory",
+     "anahtar": [
+      "karar ağacı",
+      "karar analizi",
+      "oyun teorisi",
+      "çok kriterli",
+      "decision analysis",
+      "decision tree",
+      "game theory",
+      "AHP",
+      "multi-criteria decision"
+     ],
+     "dersler": [
+      "ENM 450",
+      "ENM 306"
+     ]
+    },
+    {
+     "id": "sezgisel",
+     "ad": "Sezgisel yöntemler ve metasezgiseller",
+     "ad_en": "Heuristics and metaheuristics",
+     "anahtar": [
+      "sezgisel",
+      "genetik algoritma",
+      "tavlama benzetimi",
+      "tabu araştırması",
+      "heuristic",
+      "genetic algorithm",
+      "simulated annealing",
+      "metaheuristic"
+     ],
+     "dersler": [
+      "ENM 481"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "muh_ekonomisi",
+   "ad": "Mühendislik Ekonomisi",
+   "ad_en": "Engineering Economic Analysis",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 307",
+    "IE 226",
+    "ENM 456",
+    "ENM 364",
+    "ENM 360"
+   ],
+   "kaynaklar": [
+    "Blank & Tarquin: Engineering Economy",
+    "Newnan: Engineering Economic Analysis",
+    "Park: Contemporary Engineering Economics"
+   ],
+   "konular": [
+    {
+     "id": "para_zaman",
+     "ad": "Paranın zaman değeri ve eşdeğerlik",
+     "ad_en": "Time value of money and equivalence",
+     "anahtar": [
+      "paranın zaman değeri",
+      "bileşik faiz",
+      "eşdeğerlik",
+      "efektif faiz",
+      "time value of money",
+      "compound interest",
+      "equivalence",
+      "annuity"
+     ]
+    },
+    {
+     "id": "yatirim_degerlendirme",
+     "ad": "Yatırım değerlendirme: NBD, İGO, fayda/maliyet",
+     "ad_en": "Investment appraisal: NPV, IRR, B/C",
+     "anahtar": [
+      "net bugünkü değer",
+      "iç getiri oranı",
+      "fayda maliyet",
+      "geri ödeme süresi",
+      "net present value",
+      "internal rate of return",
+      "benefit cost ratio",
+      "payback period",
+      "MARR"
+     ],
+     "dersler": [
+      "ENM 307",
+      "ENM 456",
+      "ENM 364"
+     ]
+    },
+    {
+     "id": "yenileme_amortisman",
+     "ad": "Yenileme, amortisman ve vergi",
+     "ad_en": "Replacement, depreciation, tax",
+     "anahtar": [
+      "yenileme analizi",
+      "amortisman",
+      "vergi sonrası",
+      "replacement analysis",
+      "depreciation",
+      "MACRS",
+      "after-tax cash flow"
+     ]
+    },
+    {
+     "id": "maliyet_analizi",
+     "ad": "Maliyet analizi ve başabaş",
+     "ad_en": "Cost analysis and break-even",
+     "anahtar": [
+      "maliyet analizi",
+      "başabaş",
+      "birim maliyet",
+      "cost accounting",
+      "break-even",
+      "activity based costing",
+      "ABC costing",
+      "maliyet muhasebesi"
+     ],
+     "dersler": [
+      "IE 226"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tesis",
+   "ad": "Tesis Mühendisliği ve Enerji Yönetimi",
+   "ad_en": "Facilities Engineering & Energy Management",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 317",
+    "ENM 476",
+    "ENM 380"
+   ],
+   "kaynaklar": [
+    "Tompkins: Facilities Planning",
+    "Francis & White: Facility Layout and Location"
+   ],
+   "konular": [
+    {
+     "id": "yer_secimi",
+     "ad": "Tesis yer seçimi",
+     "ad_en": "Facility location",
+     "anahtar": [
+      "tesis yer seçimi",
+      "yer seçimi",
+      "facility location",
+      "plant location",
+      "weighted scoring location",
+      "center of gravity"
+     ]
+    },
+    {
+     "id": "yerlesim",
+     "ad": "Tesis yerleşim düzeni",
+     "ad_en": "Facility layout",
+     "anahtar": [
+      "tesis yerleşimi",
+      "yerleşim düzeni",
+      "layout",
+      "SLP",
+      "systematic layout planning",
+      "CRAFT",
+      "grup teknolojisi",
+      "cellular layout"
+     ]
+    },
+    {
+     "id": "malzeme_tasima",
+     "ad": "Malzeme taşıma ve depolama",
+     "ad_en": "Material handling and warehousing",
+     "anahtar": [
+      "malzeme taşıma",
+      "depolama",
+      "AGV",
+      "konveyör",
+      "material handling",
+      "warehouse design",
+      "storage systems"
+     ],
+     "dersler": [
+      "ENM 476"
+     ]
+    },
+    {
+     "id": "bakim",
+     "ad": "Bakım planlaması ve enerji yönetimi",
+     "ad_en": "Maintenance planning and energy management",
+     "anahtar": [
+      "bakım planlama",
+      "önleyici bakım",
+      "enerji yönetimi",
+      "maintenance planning",
+      "preventive maintenance",
+      "energy management",
+      "energy efficiency"
+     ],
+     "dersler": [
+      "ENM 380"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "kalite",
+   "ad": "Kalite ve Güvenilirlik",
+   "ad_en": "Quality & Reliability",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 407",
+    "ENM 463",
+    "ENM 465",
+    "ENM 208"
+   ],
+   "kaynaklar": [
+    "Montgomery: Introduction to Statistical Quality Control",
+    "Juran's Quality Handbook",
+    "Ebeling: Reliability and Maintainability Engineering"
+   ],
+   "konular": [
+    {
+     "id": "kontrol_kartlari",
+     "ad": "İstatistiksel süreç kontrolü ve kontrol kartları",
+     "ad_en": "Statistical process control and control charts",
+     "anahtar": [
+      "kontrol kartı",
+      "SPC",
+      "süreç kontrolü",
+      "control chart",
+      "statistical process control",
+      "X-bar R chart",
+      "p chart",
+      "CUSUM",
+      "EWMA"
+     ],
+     "dersler": [
+      "ENM 407"
+     ]
+    },
+    {
+     "id": "surec_yeterliligi",
+     "ad": "Süreç yeterliliği ve ölçüm sistemi analizi",
+     "ad_en": "Process capability and MSA",
+     "anahtar": [
+      "süreç yeterliliği",
+      "Cp",
+      "Cpk",
+      "ölçüm sistemi analizi",
+      "process capability",
+      "capability index",
+      "gage R&R",
+      "MSA"
+     ],
+     "dersler": [
+      "ENM 407"
+     ]
+    },
+    {
+     "id": "kabul_ornekleme",
+     "ad": "Kabul örneklemesi",
+     "ad_en": "Acceptance sampling",
+     "anahtar": [
+      "kabul örneklemesi",
+      "örnekleme planı",
+      "OC eğrisi",
+      "acceptance sampling",
+      "sampling plan",
+      "AQL",
+      "operating characteristic"
+     ],
+     "dersler": [
+      "ENM 407"
+     ]
+    },
+    {
+     "id": "deney_tasarimi",
+     "ad": "Deney tasarımı",
+     "ad_en": "Design of experiments",
+     "anahtar": [
+      "deney tasarımı",
+      "faktöriyel",
+      "varyans analizi",
+      "design of experiments",
+      "factorial design",
+      "ANOVA",
+      "Taguchi",
+      "response surface"
+     ],
+     "dersler": [
+      "ENM 407",
+      "ENM 356"
+     ]
+    },
+    {
+     "id": "guvenilirlik",
+     "ad": "Güvenilirlik mühendisliği",
+     "ad_en": "Reliability engineering",
+     "anahtar": [
+      "güvenilirlik",
+      "arıza oranı",
+      "Weibull",
+      "MTBF",
+      "reliability",
+      "failure rate",
+      "fault tree",
+      "FMEA",
+      "hata türü ve etkileri"
+     ],
+     "dersler": [
+      "ENM 465"
+     ]
+    },
+    {
+     "id": "toplam_kalite",
+     "ad": "Toplam kalite yönetimi ve ISO 9001",
+     "ad_en": "Total quality management and ISO 9001",
+     "anahtar": [
+      "toplam kalite yönetimi",
+      "ISO 9001",
+      "kalite güvence",
+      "total quality management",
+      "quality management system",
+      "kalite maliyetleri",
+      "quality cost"
+     ],
+     "dersler": [
+      "ENM 463"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ergonomi",
+   "ad": "Ergonomi ve İnsan Faktörleri",
+   "ad_en": "Ergonomics & Human Factors",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 323",
+    "ISG 401",
+    "ISG 402"
+   ],
+   "kaynaklar": [
+    "Sanders & McCormick: Human Factors in Engineering and Design",
+    "Kroemer: Fitting the Human"
+   ],
+   "konular": [
+    {
+     "id": "antropometri",
+     "ad": "Antropometri ve iş yeri tasarımı",
+     "ad_en": "Anthropometry and workplace design",
+     "anahtar": [
+      "antropometri",
+      "iş yeri tasarımı",
+      "anthropometry",
+      "workstation design",
+      "percentile design"
+     ]
+    },
+    {
+     "id": "fiziksel_yuk",
+     "ad": "Fiziksel yük, kaldırma ve duruş analizi",
+     "ad_en": "Physical load, lifting and posture analysis",
+     "anahtar": [
+      "NIOSH kaldırma",
+      "REBA",
+      "RULA",
+      "duruş analizi",
+      "manual lifting",
+      "posture analysis",
+      "musculoskeletal disorder",
+      "biomechanics"
+     ]
+    },
+    {
+     "id": "bilissel",
+     "ad": "Bilişsel ergonomi ve çevre koşulları",
+     "ad_en": "Cognitive ergonomics and environment",
+     "anahtar": [
+      "bilişsel ergonomi",
+      "gürültü",
+      "aydınlatma",
+      "termal konfor",
+      "mental workload",
+      "noise",
+      "illumination",
+      "thermal comfort",
+      "human error"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "uretim_planlama",
+   "ad": "Üretim Planlama ve Kontrol",
+   "ad_en": "Operations Management / Production Planning & Control",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 312",
+    "ENM 409",
+    "ENM 453",
+    "ENM 467",
+    "ENM 482"
+   ],
+   "kaynaklar": [
+    "Nahmias: Production and Operations Analysis",
+    "Silver, Pyke, Thomas: Inventory and Production Management in Supply Chains",
+    "Vollmann: Manufacturing Planning and Control for Supply Chain Management"
+   ],
+   "konular": [
+    {
+     "id": "tahmin",
+     "ad": "Talep tahmini",
+     "ad_en": "Demand forecasting",
+     "anahtar": [
+      "talep tahmini",
+      "hareketli ortalama",
+      "üstel düzeltme",
+      "demand forecasting",
+      "moving average",
+      "exponential smoothing",
+      "Holt Winters",
+      "forecast error MAPE"
+     ],
+     "dersler": [
+      "ENM 312",
+      "ENM 357"
+     ]
+    },
+    {
+     "id": "stok_kontrol",
+     "ad": "Stok kontrol: EOQ, (Q,r), (s,S)",
+     "ad_en": "Inventory control: EOQ, (Q,r), (s,S)",
+     "anahtar": [
+      "stok kontrol",
+      "ekonomik sipariş miktarı",
+      "emniyet stoku",
+      "yeniden sipariş noktası",
+      "EOQ",
+      "safety stock",
+      "reorder point",
+      "newsvendor",
+      "inventory control"
+     ],
+     "dersler": [
+      "ENM 312",
+      "ENM 467"
+     ]
+    },
+    {
+     "id": "toplu_planlama",
+     "ad": "Toplu üretim planlaması ve ana üretim çizelgesi",
+     "ad_en": "Aggregate planning and master production scheduling",
+     "anahtar": [
+      "toplu üretim planlama",
+      "ana üretim çizelgesi",
+      "aggregate planning",
+      "master production schedule",
+      "MPS",
+      "capacity planning",
+      "kapasite planlama"
+     ],
+     "dersler": [
+      "ENM 312",
+      "ENM 409"
+     ]
+    },
+    {
+     "id": "mrp",
+     "ad": "MRP, MRP II ve parti büyüklüğü",
+     "ad_en": "MRP, MRP II and lot sizing",
+     "anahtar": [
+      "MRP",
+      "malzeme ihtiyaç planlaması",
+      "ürün ağacı",
+      "parti büyüklüğü",
+      "Wagner-Whitin",
+      "material requirements planning",
+      "bill of materials",
+      "lot sizing",
+      "Silver-Meal",
+      "MRP II",
+      "net requirements"
+     ],
+     "dersler": [
+      "ENM 312",
+      "ENM 460"
+     ]
+    },
+    {
+     "id": "cizelgeleme",
+     "ad": "Çizelgeleme",
+     "ad_en": "Scheduling",
+     "anahtar": [
+      "çizelgeleme",
+      "Johnson kuralı",
+      "iş atölyesi",
+      "scheduling",
+      "job shop",
+      "flow shop",
+      "dispatching rules",
+      "makespan",
+      "SPT EDD"
+     ],
+     "dersler": [
+      "ENM 453"
+     ]
+    },
+    {
+     "id": "montaj_hatti",
+     "ad": "Montaj hattı dengeleme",
+     "ad_en": "Assembly line balancing",
+     "anahtar": [
+      "montaj hattı dengeleme",
+      "hat dengeleme",
+      "çevrim süresi",
+      "assembly line balancing",
+      "cycle time",
+      "takt time",
+      "precedence diagram"
+     ],
+     "dersler": [
+      "ENM 482"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "tedarik_zinciri",
+   "ad": "Tedarik Zinciri Yönetimi",
+   "ad_en": "Supply Chain Management",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 483",
+    "ENM 455",
+    "ENM 467",
+    "ENM 409"
+   ],
+   "kaynaklar": [
+    "Chopra & Meindl: Supply Chain Management",
+    "Simchi-Levi: Designing and Managing the Supply Chain"
+   ],
+   "konular": [
+    {
+     "id": "tz_tasarim",
+     "ad": "Tedarik zinciri tasarımı ve stratejisi",
+     "ad_en": "Supply chain design and strategy",
+     "anahtar": [
+      "tedarik zinciri",
+      "tedarik zinciri tasarımı",
+      "supply chain design",
+      "supply chain strategy",
+      "network design"
+     ]
+    },
+    {
+     "id": "kamcı_etkisi",
+     "ad": "Kamçı etkisi ve koordinasyon",
+     "ad_en": "Bullwhip effect and coordination",
+     "anahtar": [
+      "kamçı etkisi",
+      "bilgi paylaşımı",
+      "bullwhip effect",
+      "information sharing",
+      "vendor managed inventory",
+      "beer game"
+     ]
+    },
+    {
+     "id": "lojistik",
+     "ad": "Lojistik, dağıtım ve araç rotalama",
+     "ad_en": "Logistics, distribution and vehicle routing",
+     "anahtar": [
+      "lojistik",
+      "dağıtım",
+      "araç rotalama",
+      "logistics",
+      "distribution",
+      "vehicle routing",
+      "transportation management",
+      "TMS",
+      "gezgin satıcı"
+     ],
+     "dersler": [
+      "ENM 455"
+     ]
+    },
+    {
+     "id": "satin_alma",
+     "ad": "Satın alma ve tedarikçi yönetimi",
+     "ad_en": "Procurement and supplier management",
+     "anahtar": [
+      "satın alma",
+      "tedarikçi seçimi",
+      "sourcing",
+      "procurement",
+      "supplier selection",
+      "strategic sourcing",
+      "vendor evaluation"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "muh_yonetimi",
+   "ad": "Mühendislik Yönetimi",
+   "ad_en": "Engineering Management",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 351",
+    "ENM 474",
+    "TOS 363",
+    "TOS 372",
+    "TOS 355"
+   ],
+   "kaynaklar": [
+    "Meredith & Mantel: Project Management",
+    "PMBOK Guide",
+    "Kerzner: Project Management"
+   ],
+   "konular": [
+    {
+     "id": "proje_yonetimi",
+     "ad": "Proje yönetimi: CPM/PERT",
+     "ad_en": "Project management: CPM/PERT",
+     "anahtar": [
+      "proje yönetimi",
+      "PERT",
+      "CPM",
+      "kritik yol",
+      "proje çizelgesi",
+      "project management",
+      "critical path method",
+      "PERT",
+      "Gantt",
+      "earned value",
+      "resource leveling"
+     ],
+     "dersler": [
+      "ENM 351",
+      "ENM 305"
+     ]
+    },
+    {
+     "id": "strateji",
+     "ad": "Stratejik yönetim ve teknoloji yönetimi",
+     "ad_en": "Strategic and technology management",
+     "anahtar": [
+      "stratejik yönetim",
+      "teknoloji yönetimi",
+      "strategic management",
+      "technology management",
+      "balanced scorecard",
+      "SWOT",
+      "competitive strategy"
+     ],
+     "dersler": [
+      "ENM 474",
+      "TOS 363"
+     ]
+    },
+    {
+     "id": "girisim_insan",
+     "ad": "Girişimcilik ve insan kaynakları",
+     "ad_en": "Entrepreneurship and human resources",
+     "anahtar": [
+      "girişimcilik",
+      "insan kaynakları",
+      "entrepreneurship",
+      "human resource management",
+      "leadership",
+      "business plan"
+     ],
+     "dersler": [
+      "TOS 372",
+      "TOS 353"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bilgi_muh",
+   "ad": "Bilgi Mühendisliği",
+   "ad_en": "Information Engineering",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 326",
+    "ENM 414",
+    "ENM 460",
+    "ENM 370"
+   ],
+   "kaynaklar": [
+    "Laudon: Management Information Systems",
+    "Elmasri & Navathe: Fundamentals of Database Systems"
+   ],
+   "konular": [
+    {
+     "id": "veritabani",
+     "ad": "Veritabanı ve SQL",
+     "ad_en": "Databases and SQL",
+     "anahtar": [
+      "veritabanı",
+      "SQL",
+      "ilişkisel model",
+      "varlık ilişki",
+      "database",
+      "relational model",
+      "entity relationship",
+      "normalization",
+      "data warehouse"
+     ],
+     "dersler": [
+      "ENM 326"
+     ]
+    },
+    {
+     "id": "yonetim_bilisim",
+     "ad": "Yönetim bilişim sistemleri",
+     "ad_en": "Management information systems",
+     "anahtar": [
+      "yönetim bilişim sistemleri",
+      "karar destek sistemi",
+      "management information systems",
+      "decision support system",
+      "information systems"
+     ],
+     "dersler": [
+      "ENM 414"
+     ]
+    },
+    {
+     "id": "veri_madenciligi",
+     "ad": "Veri madenciliği ve makine öğrenmesi",
+     "ad_en": "Data mining and machine learning",
+     "anahtar": [
+      "veri madenciliği",
+      "makine öğrenmesi",
+      "sınıflandırma",
+      "kümeleme",
+      "data mining",
+      "machine learning",
+      "classification",
+      "clustering",
+      "regression",
+      "neural network"
+     ],
+     "dersler": [
+      "ENM 370",
+      "ENM 382"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "imalat_tasarim",
+   "ad": "Tasarım ve İmalat Mühendisliği",
+   "ad_en": "Design & Manufacturing Engineering",
+   "grup": "IISE",
+   "dersler": [
+    "IE 224",
+    "ENM 454",
+    "ENM 470",
+    "IE 223"
+   ],
+   "kaynaklar": [
+    "Groover: Fundamentals of Modern Manufacturing",
+    "Kalpakjian: Manufacturing Engineering and Technology"
+   ],
+   "konular": [
+    {
+     "id": "imalat_surecleri",
+     "ad": "İmalat süreçleri",
+     "ad_en": "Manufacturing processes",
+     "anahtar": [
+      "imalat süreçleri",
+      "talaşlı imalat",
+      "döküm",
+      "kaynak",
+      "manufacturing processes",
+      "machining",
+      "casting",
+      "welding",
+      "forming"
+     ],
+     "dersler": [
+      "IE 224"
+     ]
+    },
+    {
+     "id": "cim_cnc",
+     "ad": "Bilgisayarla bütünleşik imalat, CNC, esnek imalat",
+     "ad_en": "CIM, CNC, flexible manufacturing",
+     "anahtar": [
+      "bilgisayarla bütünleşik imalat",
+      "CNC",
+      "esnek imalat",
+      "robot",
+      "computer integrated manufacturing",
+      "flexible manufacturing system",
+      "CAD CAM",
+      "numerical control"
+     ],
+     "dersler": [
+      "ENM 454"
+     ]
+    },
+    {
+     "id": "grup_teknolojisi",
+     "ad": "Grup teknolojisi ve hücresel imalat",
+     "ad_en": "Group technology and cellular manufacturing",
+     "anahtar": [
+      "grup teknolojisi",
+      "hücresel imalat",
+      "group technology",
+      "cellular manufacturing",
+      "part family"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "urun_tasarim",
+   "ad": "Ürün Tasarımı ve Geliştirme",
+   "ad_en": "Product Design & Development",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 477",
+    "ENM 411",
+    "ENM 412"
+   ],
+   "kaynaklar": [
+    "Ulrich & Eppinger: Product Design and Development",
+    "Pahl & Beitz: Engineering Design"
+   ],
+   "konular": [
+    {
+     "id": "urun_gelistirme",
+     "ad": "Ürün geliştirme süreci",
+     "ad_en": "Product development process",
+     "anahtar": [
+      "ürün geliştirme",
+      "müşteri ihtiyaçları",
+      "product development",
+      "concept generation",
+      "stage gate",
+      "new product development"
+     ]
+    },
+    {
+     "id": "kfd_dfm",
+     "ad": "Kalite fonksiyon yayılımı, DFMA",
+     "ad_en": "QFD and design for manufacturing",
+     "anahtar": [
+      "kalite fonksiyon yayılımı",
+      "kalite evi",
+      "QFD",
+      "house of quality",
+      "DFMA",
+      "design for manufacturing",
+      "value engineering",
+      "değer mühendisliği"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "sistem_tasarim",
+   "ad": "Sistem Tasarımı ve Mühendisliği",
+   "ad_en": "System Design & Engineering",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 406",
+    "ENM 464"
+   ],
+   "kaynaklar": [
+    "Blanchard & Fabrycky: Systems Engineering and Analysis",
+    "Kossiakoff: Systems Engineering Principles and Practice"
+   ],
+   "konular": [
+    {
+     "id": "sistem_analizi",
+     "ad": "Sistem analizi ve tasarımı",
+     "ad_en": "Systems analysis and design",
+     "anahtar": [
+      "sistem analizi",
+      "sistem tasarımı",
+      "gereksinim analizi",
+      "systems analysis",
+      "systems engineering",
+      "requirements analysis",
+      "V-model",
+      "system life cycle"
+     ]
+    },
+    {
+     "id": "sistem_dinamigi",
+     "ad": "Sistem dinamiği",
+     "ad_en": "System dynamics",
+     "anahtar": [
+      "sistem dinamiği",
+      "geri besleme döngüsü",
+      "system dynamics",
+      "feedback loop",
+      "causal loop diagram",
+      "stock and flow"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "benzetim",
+   "ad": "Benzetim",
+   "ad_en": "Simulation",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 316",
+    "ENM 457"
+   ],
+   "kaynaklar": [
+    "Law: Simulation Modeling and Analysis",
+    "Banks et al.: Discrete-Event System Simulation"
+   ],
+   "konular": [
+    {
+     "id": "kesikli_olay",
+     "ad": "Kesikli olay benzetimi",
+     "ad_en": "Discrete-event simulation",
+     "anahtar": [
+      "kesikli olay benzetimi",
+      "benzetim",
+      "discrete event simulation",
+      "simulation model",
+      "Arena",
+      "Simio",
+      "AnyLogic",
+      "simulation"
+     ]
+    },
+    {
+     "id": "girdi_cikti",
+     "ad": "Girdi analizi ve çıktı analizi",
+     "ad_en": "Input and output analysis",
+     "anahtar": [
+      "rastgele sayı üretimi",
+      "girdi analizi",
+      "çıktı analizi",
+      "random number generation",
+      "input modeling",
+      "output analysis",
+      "warm-up",
+      "replication",
+      "Monte Carlo"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "istatistik",
+   "ad": "İstatistik ve Veri Analizi",
+   "ad_en": "Statistics",
+   "grup": "IISE",
+   "dersler": [
+    "ENM 208",
+    "IE 207",
+    "ENM 356",
+    "ENM 357"
+   ],
+   "kaynaklar": [
+    "Montgomery & Runger: Applied Statistics and Probability for Engineers",
+    "Walpole: Probability and Statistics for Engineers"
+   ],
+   "konular": [
+    {
+     "id": "olasilik",
+     "ad": "Olasılık ve dağılımlar",
+     "ad_en": "Probability and distributions",
+     "anahtar": [
+      "olasılık",
+      "rastgele değişken",
+      "dağılım",
+      "probability",
+      "random variable",
+      "normal distribution",
+      "exponential distribution",
+      "Poisson"
+     ],
+     "dersler": [
+      "IE 207"
+     ]
+    },
+    {
+     "id": "cikarimsal",
+     "ad": "Güven aralığı ve hipotez testleri",
+     "ad_en": "Confidence intervals and hypothesis tests",
+     "anahtar": [
+      "güven aralığı",
+      "hipotez testi",
+      "t testi",
+      "confidence interval",
+      "hypothesis testing",
+      "t-test",
+      "p-value",
+      "chi-square"
+     ],
+     "dersler": [
+      "ENM 208"
+     ]
+    },
+    {
+     "id": "regresyon",
+     "ad": "Regresyon ve zaman serileri",
+     "ad_en": "Regression and time series",
+     "anahtar": [
+      "regresyon",
+      "korelasyon",
+      "zaman serileri",
+      "regression",
+      "correlation",
+      "time series",
+      "ARIMA",
+      "least squares"
+     ],
+     "dersler": [
+      "ENM 356",
+      "ENM 357"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "erp",
+   "ad": "ERP ve Kurumsal Sistemler",
+   "ad_en": "ERP and Enterprise Systems",
+   "grup": "Sektör",
+   "dersler": [
+    "ENM 460",
+    "ENM 414",
+    "ENM 312"
+   ],
+   "kaynaklar": [
+    "Monk & Wagner: Concepts in Enterprise Resource Planning",
+    "Magal & Word: Integrated Business Processes with ERP Systems",
+    "SAP Press: Materials Management with SAP ERP"
+   ],
+   "konular": [
+    {
+     "id": "erp_temel",
+     "ad": "ERP temelleri ve iş süreçleri (P2P, O2C)",
+     "ad_en": "ERP fundamentals and business processes",
+     "anahtar": [
+      "ERP",
+      "kurumsal kaynak planlaması",
+      "satın alma süreci",
+      "satış süreci",
+      "enterprise resource planning",
+      "procure to pay",
+      "order to cash",
+      "business process",
+      "ERP implementation"
+     ]
+    },
+    {
+     "id": "sap",
+     "ad": "SAP modülleri (MM, PP, SD, FI/CO, WM)",
+     "ad_en": "SAP modules",
+     "anahtar": [
+      "SAP",
+      "SAP MM",
+      "SAP PP",
+      "SAP SD",
+      "SAP FI",
+      "SAP CO",
+      "S/4HANA",
+      "EWM",
+      "malzeme ana verisi",
+      "material master"
+     ]
+    },
+    {
+     "id": "odoo_erpnext",
+     "ad": "Odoo ve ERPNext (açık kaynak ERP)",
+     "ad_en": "Odoo and ERPNext (open-source ERP)",
+     "anahtar": [
+      "Odoo",
+      "ERPNext",
+      "açık kaynak ERP",
+      "open source ERP",
+      "Odoo manufacturing",
+      "ERPNext manufacturing"
+     ]
+    },
+    {
+     "id": "mes_wms_aps",
+     "ad": "MES, WMS, APS, PLM",
+     "ad_en": "MES, WMS, APS, PLM",
+     "anahtar": [
+      "MES",
+      "imalat yürütme sistemi",
+      "depo yönetim sistemi",
+      "WMS",
+      "ileri planlama",
+      "APS",
+      "PLM",
+      "ürün yaşam döngüsü yönetimi",
+      "manufacturing execution system",
+      "warehouse management system",
+      "advanced planning and scheduling",
+      "product lifecycle management"
+     ],
+     "dersler": [
+      "ENM 460",
+      "ENM 454"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "yalin",
+   "ad": "Yalın Üretim",
+   "ad_en": "Lean Manufacturing",
+   "grup": "Sektör",
+   "dersler": [
+    "ENM 484",
+    "ENM 409"
+   ],
+   "kaynaklar": [
+    "Womack & Jones: Lean Thinking",
+    "Liker: The Toyota Way",
+    "Rother & Shook: Learning to See"
+   ],
+   "konular": [
+    {
+     "id": "vsm",
+     "ad": "Değer akışı haritalama ve israf",
+     "ad_en": "Value stream mapping and waste",
+     "anahtar": [
+      "değer akışı haritalama",
+      "VSM",
+      "israf",
+      "muda",
+      "value stream mapping",
+      "seven wastes",
+      "lean manufacturing"
+     ]
+    },
+    {
+     "id": "kanban_jit",
+     "ad": "Kanban, tam zamanında üretim, çekme sistemi",
+     "ad_en": "Kanban, JIT, pull systems",
+     "anahtar": [
+      "kanban",
+      "tam zamanında üretim",
+      "çekme sistemi",
+      "JIT",
+      "just in time",
+      "pull system",
+      "CONWIP",
+      "heijunka"
+     ]
+    },
+    {
+     "id": "5s_smed_tpm",
+     "ad": "5S, SMED, TPM",
+     "ad_en": "5S, SMED, TPM",
+     "anahtar": [
+      "5S",
+      "SMED",
+      "hızlı kalıp değiştirme",
+      "TPM",
+      "toplam verimli bakım",
+      "setup reduction",
+      "total productive maintenance",
+      "poka-yoke",
+      "kaizen",
+      "standard work"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "alti_sigma",
+   "ad": "Altı Sigma",
+   "ad_en": "Six Sigma",
+   "grup": "Sektör",
+   "dersler": [
+    "ENM 407",
+    "ENM 463"
+   ],
+   "kaynaklar": [
+    "Pyzdek & Keller: The Six Sigma Handbook",
+    "George: Lean Six Sigma"
+   ],
+   "konular": [
+    {
+     "id": "dmaic",
+     "ad": "DMAIC ve belt seviyeleri",
+     "ad_en": "DMAIC and belt levels",
+     "anahtar": [
+      "DMAIC",
+      "altı sigma",
+      "yeşil kuşak",
+      "kara kuşak",
+      "Six Sigma",
+      "green belt",
+      "black belt",
+      "define measure analyze improve control",
+      "SIPOC",
+      "DPMO"
+     ]
+    },
+    {
+     "id": "alti_sigma_araclar",
+     "ad": "Kök neden ve iyileştirme araçları",
+     "ad_en": "Root cause and improvement tools",
+     "anahtar": [
+      "kök neden analizi",
+      "balık kılçığı",
+      "pareto",
+      "5 neden",
+      "root cause analysis",
+      "fishbone",
+      "Pareto chart",
+      "5 whys",
+      "A3",
+      "FMEA"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "endustri40",
+   "ad": "Endüstri 4.0 ve Dijital Dönüşüm",
+   "ad_en": "Industry 4.0 and Digital Transformation",
+   "grup": "Sektör",
+   "dersler": [
+    "ENM 454",
+    "ENM 470",
+    "ENM 383"
+   ],
+   "kaynaklar": [
+    "Schwab: The Fourth Industrial Revolution",
+    "Industry 4.0 maturity literatür"
+   ],
+   "konular": [
+    {
+     "id": "iot_siber",
+     "ad": "IoT, siber-fiziksel sistemler",
+     "ad_en": "IoT and cyber-physical systems",
+     "anahtar": [
+      "nesnelerin interneti",
+      "siber fiziksel sistem",
+      "IoT",
+      "cyber-physical systems",
+      "Industry 4.0",
+      "industrial internet",
+      "sensor",
+      "edge computing",
+      "OPC UA"
+     ]
+    },
+    {
+     "id": "dijital_ikiz",
+     "ad": "Dijital ikiz ve akıllı fabrika",
+     "ad_en": "Digital twin and smart factory",
+     "anahtar": [
+      "dijital ikiz",
+      "akıllı fabrika",
+      "digital twin",
+      "smart factory",
+      "smart manufacturing",
+      "predictive maintenance",
+      "öngörücü bakım"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "veri_analitigi",
+   "ad": "Veri Analitiği ve İş Zekâsı",
+   "ad_en": "Data Analytics and BI",
+   "grup": "Sektör",
+   "dersler": [
+    "ENM 370",
+    "ENM 382",
+    "ENM 326"
+   ],
+   "kaynaklar": [
+    "Provost & Fawcett: Data Science for Business",
+    "Kimball: The Data Warehouse Toolkit"
+   ],
+   "konular": [
+    {
+     "id": "bi_dashboard",
+     "ad": "İş zekâsı, gösterge panelleri, KPI",
+     "ad_en": "Business intelligence, dashboards, KPIs",
+     "anahtar": [
+      "iş zekâsı",
+      "gösterge paneli",
+      "KPI",
+      "business intelligence",
+      "dashboard",
+      "Power BI",
+      "Tableau",
+      "data visualization",
+      "key performance indicator"
+     ]
+    },
+    {
+     "id": "analitik",
+     "ad": "Tahminsel ve kuralcı analitik",
+     "ad_en": "Predictive and prescriptive analytics",
+     "anahtar": [
+      "tahminsel analitik",
+      "kuralcı analitik",
+      "predictive analytics",
+      "prescriptive analytics",
+      "Python data analysis",
+      "pandas",
+      "analytics"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "proje_isg",
+   "ad": "Proje Yönetimi ve İş Sağlığı ve Güvenliği",
+   "ad_en": "Project Management and OHS",
+   "grup": "Sektör",
+   "dersler": [
+    "ENM 351",
+    "ISG 401",
+    "ISG 402"
+   ],
+   "kaynaklar": [
+    "PMBOK Guide",
+    "ISO 45001 standardı",
+    "Reese: Occupational Health and Safety Management"
+   ],
+   "konular": [
+    {
+     "id": "pm_uygulama",
+     "ad": "Proje yönetimi uygulaması (Agile, PMBOK)",
+     "ad_en": "Project management practice (Agile, PMBOK)",
+     "anahtar": [
+      "proje yönetimi uygulama",
+      "Agile",
+      "Scrum",
+      "PMBOK",
+      "WBS",
+      "risk yönetimi",
+      "work breakdown structure",
+      "project risk",
+      "agile project management"
+     ]
+    },
+    {
+     "id": "isg",
+     "ad": "İş sağlığı ve güvenliği, risk değerlendirme",
+     "ad_en": "OHS and risk assessment",
+     "anahtar": [
+      "iş sağlığı ve güvenliği",
+      "iş güvenliği",
+      "risk değerlendirme",
+      "ISO 45001",
+      "occupational health and safety",
+      "risk assessment",
+      "hazard",
+      "accident prevention",
+      "ISG"
+     ],
+     "dersler": [
+      "ISG 401",
+      "ISG 402"
+     ]
+    }
+   ]
+  }
+ ]
+}

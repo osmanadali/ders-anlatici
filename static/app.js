@@ -230,6 +230,14 @@
       case "step": player.enqueue(ev); break;
       case "memory": toast(`Not aldım: “${ev.topic}” konusunu tekrar edeceğiz.`); break;
       case "notice": toast(ev.message); break;
+      case "hesap": {  // hesap aracı çalıştı: sohbette küçük rozet
+        const rz = document.createElement("div");
+        rz.className = "hesap-rozet";
+        rz.textContent = ev.message || ("🧮 Hesaplandı: " + (ev.baslik || ev.arac));
+        S.tutorBubble ? S.tutorBubble.before(rz) : $("#chatLog").appendChild(rz);
+        scrollChat();
+        break;
+      }
       case "stage": $("#caption").textContent = ev.message; teacherStatus(ev.message); break;
       case "status": {
         $("#caption").textContent = ev.message;
@@ -246,6 +254,46 @@
       case "error": dropEmptyBubble(); addMsg("err", ev.message); $("#caption").textContent = ""; S.lectureActive = false; break;
     }
   }
+
+  // ================================================================ ERP alıştırması
+  let erp = null;
+  function erpCiz() {
+    const e = erp, T = e.hafta_sayisi, hf = Array.from({ length: T }, (_, i) => i + 1);
+    const bom = e.bom.map((b) => `${libEsc(b.ust)} → ${b.adet}× ${libEsc(b.bilesen)}`).join(" · ");
+    const kal = e.kalemler.map((k) => `<tr><td>${libEsc(k.ad)}</td><td>${k.seviye}</td><td>${k.stok}</td><td>${k.tedarik_suresi} hf</td>` +
+      `<td>${k.parti === "FOQ" ? "FOQ " + k.parti_miktari : "L4L"}</td><td>${Object.entries(k.planlanan_alimlar || {}).map(([w, q]) => `${w}. hf: ${q}`).join(", ") || "-"}</td></tr>`).join("");
+    const satirlar = e.kalemler.map((k) => `<tr><td>${libEsc(k.ad)}</td>` + hf.map((w) => `<td><input type="number" inputmode="numeric" min="0" data-k="${libEsc(k.ad)}" data-w="${w - 1}" aria-label="${libEsc(k.ad)} hafta ${w}"></td>`).join("") + `</tr>`).join("");
+    $("#erpAlan").innerHTML = `<div class="erp-not"><b>Görev:</b> ${libEsc(e.gorev)}</div>` +
+      `<div class="erp-not"><b>Ürün ağacı:</b> ${bom}</div>` +
+      `<div class="erp-kaydir"><table class="erp-tablo"><tr><th>Kalem</th><th>Seviye</th><th>Stok</th><th>Tedarik</th><th>Parti</th><th>Beklenen alım</th></tr>${kal}</table></div>` +
+      `<div class="erp-kaydir"><table class="erp-tablo"><tr><th>Hafta</th>${hf.map((w) => `<th>${w}</th>`).join("")}</tr>` +
+      `<tr><td>Ana üretim (A)</td>${e.ana_cizelge.map((v) => `<td>${v}</td>`).join("")}</tr>` +
+      `<tr><th colspan="${T + 1}">Net ihtiyaç (sen doldur)</th></tr>${satirlar}</table></div>` +
+      `<div class="row"><button id="erpKontrol" class="primary small">✅ Kontrol et</button><button id="erpAnlat" class="ghost small hidden">🎓 Hocaya anlat</button></div><div id="erpSonuc" class="erp-not"></div>`;
+    $("#erpKontrol").onclick = erpKontrol;
+  }
+  async function erpKontrol() {
+    const cevap = {};
+    document.querySelectorAll("#erpAlan input[data-k]").forEach((i) => { (cevap[i.dataset.k] ||= [])[Number(i.dataset.w)] = i.value === "" ? null : Number(i.value); });
+    try {
+      const r = await postJSON("/api/erp-alistirma/kontrol", { id: erp.id, cevap });
+      document.querySelectorAll("#erpAlan input[data-k]").forEach((i) => {
+        const ok = r.dogru[i.dataset.k]?.[Number(i.dataset.w)];
+        i.parentElement.className = ok ? "dogru" : "yanlis";
+      });
+      $("#erpSonuc").innerHTML = `<b>${r.puan}/${r.toplam} hücre doğru.</b><br>` + r.aciklama.map(libEsc).join("<br>");
+      const btn = $("#erpAnlat"); btn.classList.remove("hidden");
+      btn.onclick = () => {
+        switchTab("chat");
+        const tablo = Object.entries(r.cozum).map(([k, v]) => `${k}: ${v.join(", ")}`).join("\n");
+        ask({ text: `MRP alıştırmasında net ihtiyaç tablosunu doldurdum, ${r.puan}/${r.toplam} hücre doğru. Doğru net ihtiyaçlar (1. haftadan):\n${tablo}\nHatalarımı adım adım tahtada anlat.`, label: "🏭 ERP alıştırmasını anlat" });
+      };
+    } catch (err) { toast("Kontrol edilemedi: " + err.message); }
+  }
+  $("#erpYeni").addEventListener("click", async () => {
+    try { erp = await api(`/api/erp-alistirma?seviye=${$("#erpSeviye").value}`); erpCiz(); }
+    catch (err) { toast("Senaryo üretilemedi: " + err.message); }
+  });
 
   // ================================================================ sohbet formu ve ekler
   function renderAttachments() {
@@ -972,7 +1020,27 @@
     $("#litNow").disabled = !!l.calisiyor;
     $("#litAuto").checked = !!l.otomatik;
   }
+  // ---- bilgi haritası
+  let haritaZaman = 0;
+  async function haritaYukle(zorla) {
+    if (!zorla && Date.now() - haritaZaman < 60000) return;
+    haritaZaman = Date.now();
+    try { haritaCiz(await api("/api/bilgi-haritasi")); } catch (e) { $("#haritaBox").textContent = "Harita yüklenemedi: " + e.message; }
+  }
+  function haritaCiz(h) {
+    const box = $("#haritaBox");
+    const acik = new Set([...box.querySelectorAll("details[open]")].map((d) => d.dataset.id));
+    const bar = (k) => `<span class="h-bar" title="${Math.round(k * 100)}%"><i style="width:${Math.round(k * 100)}%"></i></span>`;
+    box.innerHTML = `<div class="muted small">${h.dugum_sayisi} konu, ${h.zayif_sayisi} tanesi zayıf · genel kapsam %${Math.round(h.kapsam * 100)}</div>` +
+      h.alanlar.map((a) => `<details data-id="${libEsc(a.id)}"${acik.has(a.id) ? " open" : ""}><summary><span class="h-ad">${libEsc(a.ad)} <span class="h-grup">${libEsc(a.grup)}</span></span>${bar(a.kapsam)}` +
+        `<span class="muted small">${a.zayif_sayisi ? a.zayif_sayisi + " zayıf" : "iyi"}</span></summary>` +
+        `<div class="muted small">${libEsc(a.ad_en)} · Dersler: ${a.dersler.map(libEsc).join(", ")}</div>` +
+        a.konular.map((k) => `<div class="h-konu${k.zayif ? " zayif" : ""}"><div class="h-ust"><b>${libEsc(k.ad)}</b>${bar(k.kapsam)}<span class="muted">${k.parca} parça</span></div>` +
+          `<div class="h-alt">${libEsc(k.ad_en)}${k.dersler.length ? " · " + k.dersler.map(libEsc).join(", ") : ""}</div>` +
+          (k.zayif ? `<div class="h-alt">📚 Öneri: ${k.kaynaklar.map(libEsc).join("; ")}</div>` : "") + `</div>`).join("") + `</details>`).join("");
+  }
   async function libLoad() {
+    haritaYukle();
     try {
       libRender(await api("/api/kutuphane"));
       $("#libMsg").textContent = "";
@@ -1451,6 +1519,7 @@
     $("#setOtoPaket").checked = st.otomatik_paket !== false;
     $("#setTarz").value = st.ogretme_tarzi === "sokratik" ? "sokratik" : "anlat";
     $("#setKendiCalisma").checked = st.kendi_calisma !== false;
+    $("#setHesap").checked = st.hesap_araclari !== false;
     $("#set3d").checked = localGet("hoca3d") !== "0";
     $("#setConvStt").value = localGet("convStt") === "whisper" || !window.BrowserConversation?.available() ? "whisper" : "browser";
     ["keyGemini", "keyEleven"].forEach((id) => ($("#" + id).value = ""));
@@ -1552,6 +1621,7 @@
       otomatik_paket: $("#setOtoPaket").checked,
       ogretme_tarzi: $("#setTarz").value,
       kendi_calisma: $("#setKendiCalisma").checked,
+      hesap_araclari: $("#setHesap").checked,
     });
     localSet("sens", $("#setSens").value);
     localSet("hoca3d", $("#set3d").checked ? "1" : "0");

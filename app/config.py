@@ -71,6 +71,7 @@ DEFAULTS = {
     "yerel_sicaklik": 0.6,
     "gemini_model": os.getenv("GEMINI_MODEL", ""),  # boş = anahtarın erişebildiği en uygun Flash modeli otomatik
     "deep_solve": os.getenv("DEEP_SOLVE", "auto"),  # auto (Gemini'de açık) | on | off
+    "hesap_araclari": True,  # sayısal mühendislik sorularında gerçek hesap araçları (EOQ, MRP, LP, kuyruk…) kullanılsın
     "level": "normal",  # basit | normal | ileri
     "tts_enabled": True,  # eski ayar; tts_provider="browser" ile aynı anlamda
     "tts_provider": os.getenv("TTS_PROVIDER", "edge"),  # edge (ücretsiz) | xtts (ücretsiz klon) | browser | elevenlabs (ücretli, isteğe bağlı)
