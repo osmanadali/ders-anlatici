@@ -220,12 +220,12 @@ export function mount({ root, board, teacher2d, onError }) {
   rig.root.position.copy(HOME);
   scene.add(rig.root);
   const T = { get root() { return rig.root; }, get head() { return rig.headObj; } };
-  fetch("/api/teacher-model", { method: "HEAD" }).then(async (r) => {
-    if (!r.ok) return;
+  fetch("/api/teacher-model/info").then((r) => r.json()).then(async (info) => {
+    if (!info.exists) return;
     const { loadGlbRig } = await import("/static/teacher_glb.js");
     let flip = false;
     try { flip = localStorage.getItem("ders.hocaCevir") === "1"; } catch {}
-    const g = await loadGlbRig("/api/teacher-model?v=" + (r.headers.get("etag") || Date.now()), { flip });
+    const g = await loadGlbRig("/api/teacher-model?v=" + encodeURIComponent(info.version), { flip });
     g.root.position.copy(rig.root.position); g.root.rotation.copy(rig.root.rotation);
     scene.remove(rig.root); scene.add(g.root); rig = g;
     window.__hocaRig = g;  // tanılama için

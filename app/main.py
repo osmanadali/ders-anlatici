@@ -65,6 +65,14 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 TEACHER_GLB = DATA_DIR / "hoca.glb"
 
 
+@app.get("/api/teacher-model/info")
+async def teacher_model_info():
+    if not TEACHER_GLB.exists():
+        return {"exists": False}
+    st = TEACHER_GLB.stat()
+    return {"exists": True, "version": f"{int(st.st_mtime)}-{st.st_size}"}
+
+
 @app.api_route("/api/teacher-model", methods=["GET", "HEAD"])
 async def teacher_model():
     if not TEACHER_GLB.exists():

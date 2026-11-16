@@ -54,7 +54,8 @@ select, input[type=text], input[type=number], input[type=date], input[type=passw
 .layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 410px; gap: 14px; padding: 14px; min-height: 0; }
 @media (max-width: 900px) {
   html, body { height: auto; min-height: 100%; }
-  .layout { grid-template-columns: 1fr; flex: none; }
+  .layout { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .layout > * { min-width: 0; }  /* sekme şeridi gibi geniş içerik sütunu ekrandan taşırmasın */
   .board-wrap { min-height: 0; }
   .classroom { flex: none; }
   .side { min-height: 520px; max-height: 85vh; }
