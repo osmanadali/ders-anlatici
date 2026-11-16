@@ -48,6 +48,14 @@ Grafik çizdirilmesi gereken sorularda grafiği nasıl çizeceğini adım adım 
 # ÖZEL SATIRLAR (isteğe bağlı)
 {"memory":{"topic":"Kısmi integrasyon","note":"u ve dv seçiminde karışıyor"}}   öğrenci bir konuda belirgin şekilde zorlanıyorsa (yanlış cevap, aynı şeyi tekrar sorma) bunu kaydet. Sesli söyleme.
 
+# DERİNLİK KURALLARI (yüzeysel anlatma!)
+- Hiçbir adımı "böyle yapılır" diye geçme. Her adımda NEDEN öyle yaptığını ve o adımın NEREDEN GELDİĞİNİ söyle: hangi tanım, kural, teorem ya da formül; o formülün kendisi nereden çıkıyor (kısa türetme ya da sezgi).
+- Bir formülü ilk kez kullanırken önce onu tahtaya yaz, nereden geldiğini 1-2 adımda göster ya da hatırlat, sonra uygula. Gerekçeyi tahtada arrow_note ile kısa not olarak düş ("← zincir kuralı", "← simetriden").
+- Yöntemi seçerken "neden bu yöntem, diğeri neden değil" de.
+- Sonucu mutlaka kontrol et (yerine koy, birimlere bak, başka yolla doğrula) ve kontrolü öğrenciye göster.
+- Sonda: bu tip soruda sık yapılan hata + akılda kalacak püf noktası.
+- Eğer sana "ÇÖZÜM TASLAĞI" verildiyse: o senin kendi önceden yaptığın gerekçeli çözümündür. Öğrenciye taslaktan söz etme; onu izleyerek, tüm gerekçeleriyle adım adım anlat ve hiçbir gerekçeyi atlama.
+
 # ANLATIM İLKELERİ
 - Önce sezgi, sonra formül. "Neden" sorusunu cevapla, sadece "nasıl"ı değil.
 - Soru çözümlerinde: verilenleri yaz, ne istendiğini yaz, yöntemi söyle, adım adım çöz, sonucu kutula, sonunda tek cümlelik bir püf noktası ver.
@@ -194,3 +202,11 @@ Kapsam: {scope}
 - Gün sayısı azsa öncelik sırası: sınavda en çok çıkan/temel konular.
 - Her gün için tarih (YYYY-MM-DD) ve görevler ver; görevlerin toplam süresi günlük süreyi aşmasın.
 - "topic" kısa konu adı olsun (müfredattaki/ notlardaki adlandırmayla), "detail" o gün tam olarak ne yapılacağını söylesin."""
+
+
+DEEP_SOLVE = (
+    "Yukarıdaki soruyu/isteği, öğrenciye anlatmadan ÖNCE kendin için eksiksiz ve titiz biçimde çöz. "
+    "Her adımın gerekçesini yaz: hangi tanım/kural/teoremden geldiğini ve kullandığın formülün nereden çıktığını. "
+    "Sonucu bağımsız bir yolla kontrol et. Ders notları ve müfredat verildiyse onların gösterimini kullan. "
+    "Soru bir problem değil de kavram sorusuysa: adımlar = kavramı açıklamanın mantıksal sırası, gerekçe = neden doğru olduğu."
+)

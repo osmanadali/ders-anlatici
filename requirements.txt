@@ -1,6 +1,7 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
 anthropic>=2.8
+google-genai>=1.30     # Gemini (ücretsiz kota) ile kullanmak için
 httpx>=0.27
 pypdf>=5.0
 pypdfium2>=4.30

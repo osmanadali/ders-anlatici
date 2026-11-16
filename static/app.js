@@ -159,6 +159,18 @@
       case "step": player.enqueue(ev); break;
       case "memory": toast(`Not aldım: “${ev.topic}” konusunu tekrar edeceğiz.`); break;
       case "notice": toast(ev.message); break;
+      case "status": {
+        $("#caption").textContent = ev.message;
+        // Düşünme süresini doğal bir ana çevir: hoca "bir bakayım" der ve düşünme pozuna geçer.
+        const fillers = ["Hmm, güzel soru. Bir dakika, önce kendim bir çözeyim, sonra sana adım adım anlatacağım.",
+          "Bir bakayım… Önce soruyu kafamda çözeyim, sonra tahtada beraber yapalım.",
+          "Tamam, düşünüyorum. Her adımın nereden geldiğini göstereceğim, bir saniye."];
+        const say = fillers[Math.floor(Math.random() * fillers.length)];
+        if (!player.busy) {
+          player.enqueue({ say, board: [], audio: S.settings.tts_enabled === false ? null : "/api/tts?text=" + encodeURIComponent(say), filler: true });
+        }
+        break;
+      }
       case "error": addMsg("err", ev.message); $("#caption").textContent = ""; S.lectureActive = false; break;
     }
   }
@@ -814,6 +826,16 @@
     $("#setLevel").value = st.level;
     $("#setEffort").value = st.effort;
     $("#setProvider").value = st.tts_provider || "edge";
+    $("#setDeep").value = st.deep_solve || "auto";
+    api("/api/llm-options").then((o) => {
+      $("#setLlm").value = o.active;
+      $("#setGeminiModel").innerHTML = (o.gemini_models.length ? o.gemini_models : [st.gemini_model])
+        .map((m) => `<option>${m}</option>`).join("");
+      $("#setGeminiModel").value = st.gemini_model;
+      const miss = [!o.gemini && "GEMINI_API_KEY", !o.claude && "ANTHROPIC_API_KEY"].filter(Boolean);
+      $("#llmInfo").textContent = (o.gemini_error ? "Gemini: " + o.gemini_error + " " : "") +
+        (miss.length ? `.env dosyasında eksik: ${miss.join(", ")} (o seçenek çalışmaz).` : "");
+    }).catch(() => {});
     $("#setStt").value = st.stt_provider || "whisper";
     $(".settings").dataset.prov = $("#setProvider").value;
     api("/api/voice-options").then((o) => {
@@ -892,6 +914,9 @@
       level: $("#setLevel").value,
       effort: $("#setEffort").value,
       tts_provider: $("#setProvider").value,
+      llm_provider: $("#setLlm").value,
+      gemini_model: $("#setGeminiModel").value || S.settings.gemini_model,
+      deep_solve: $("#setDeep").value,
       edge_voice: $("#setEdgeVoice").value || S.settings.edge_voice,
       stt_provider: $("#setStt").value,
       web_search: $("#setWeb").checked,

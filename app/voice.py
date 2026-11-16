@@ -203,6 +203,7 @@ def _xtts(text: str) -> bytes:
     with _xtts_lock:  # model aynı anda tek iş yapar
         if _xtts_model is None:
             os.environ.setdefault("COQUI_TOS_AGREED", "1")  # kişisel/ticari olmayan kullanım lisansı
+            _patch_xtts_loader()
             try:
                 import torch
 
@@ -210,8 +211,9 @@ def _xtts(text: str) -> bytes:
             except ImportError:
                 device = "cpu"
             _xtts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-        wav = _xtts_model.tts(text=text, speaker_wav=str(VOICE_SAMPLE), language="tr")
-    pcm = (np.clip(np.asarray(wav, dtype=np.float32), -1, 1) * 32767).astype("<i2").tobytes()
+        wav = _xtts_model.tts(text=text, speaker_wav=str(VOICE_SAMPLE), language="tr", speed=1.08)
+    wav = shorten_pauses(np.asarray(wav, dtype=np.float32), 24000)
+    pcm = (np.clip(wav, -1, 1) * 32767).astype("<i2").tobytes()
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
@@ -219,6 +221,55 @@ def _xtts(text: str) -> bytes:
         w.setframerate(24000)
         w.writeframes(pcm)
     return buf.getvalue()
+
+
+def shorten_pauses(wav, rate: int, max_pause: float = 0.35, keep: float = 0.25):
+    """XTTS cümleleri ayrı üretip arasına ~1 sn sessizlik koyuyor; uzun sessizlikleri doğal uzunluğa indirir,
+    baştaki/sondaki sessizliği de kırpar."""
+    import numpy as np
+
+    win = int(rate * 0.02)
+    if len(wav) < win * 3:
+        return wav
+    frames = len(wav) // win
+    energy = np.sqrt(np.mean(wav[: frames * win].reshape(frames, win) ** 2, axis=1))
+    silent = energy < max(0.008, energy.max() * 0.05)
+    out, i = [], 0
+    while i < frames:
+        j = i
+        while j < frames and silent[j] == silent[i]:
+            j += 1
+        seg = wav[i * win: j * win]
+        if silent[i]:
+            edge = i == 0 or j == frames
+            limit = 0.05 if edge else (keep if (j - i) * 0.02 > max_pause else max_pause)
+            seg = seg[: int(rate * limit)]
+        out.append(seg)
+        i = j
+    out.append(wav[frames * win:])
+    return np.concatenate(out)
+
+
+def _patch_xtts_loader() -> None:
+    """XTTS ses örneğini torchaudio/torchcodec ile okur; bu ikisinin sürüm uyuşmazlığı sık görülür.
+    Okumayı PyAV ile yaparak kurulumu sağlamlaştırırız."""
+    try:
+        import av
+        import numpy as np
+        import torch
+        import TTS.tts.models.xtts as xtts_mod
+    except ImportError:
+        return
+
+    def load_audio(path, sampling_rate):
+        c = av.open(str(path))
+        rs = av.AudioResampler(format="flt", layout="mono", rate=sampling_rate)
+        chunks = [f.to_ndarray().reshape(-1) for fr in c.decode(audio=0) for f in rs.resample(fr)]
+        chunks += [f.to_ndarray().reshape(-1) for f in rs.resample(None)]
+        c.close()
+        return torch.from_numpy(np.concatenate(chunks).astype("float32")).unsqueeze(0)
+
+    xtts_mod.load_audio = load_audio
 
 
 def save_voice_sample(data: bytes, filename: str) -> float:

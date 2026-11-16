@@ -127,6 +127,8 @@ async def fake_study_plan(course, notes_text, full, **kw):
 
 
 def install():
+    if not hasattr(llm, "real_stream_steps"):
+        llm.real_stream_steps = llm.stream_steps  # Gemini/Claude yönlendirme testleri için gerçeği sakla
     llm.lecture_notes = fake_lecture_notes
     llm.formula_sheet = fake_formula_sheet
     llm.study_plan = fake_study_plan

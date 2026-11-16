@@ -17,6 +17,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 
 # Notların tamamı bu karakter sınırının altındaysa hepsi modele verilir (önbellekli);
 # üstündeyse soruyla ilgili sayfalar seçilir.
@@ -26,6 +27,10 @@ DEFAULTS = {
     "voice_id": os.getenv("VOICE_ID", "zu3iuxxlZoTwzmAUvpNF"),  # Osman Adalı (TR klon)
     "voice_name": "Osman Adalı",
     "tts_model": os.getenv("TTS_MODEL", "eleven_multilingual_v2"),
+    "llm_provider": os.getenv("LLM_PROVIDER", ""),  # "" = otomatik (hangi anahtar varsa) | claude | gemini
+    "gemini_model": os.getenv("GEMINI_MODEL", "gemini-flash-latest"),
+    "deep_solve": os.getenv("DEEP_SOLVE", "auto"),  # auto (Gemini'de açık) | on | off
+    "claude_fallback": True,  # Gemini kotası dolarsa (Claude anahtarı varsa) Claude'a geç
     "claude_model": os.getenv("CLAUDE_MODEL", "claude-opus-5-5"),
     "effort": os.getenv("EFFORT", "medium"),
     "level": "normal",  # basit | normal | ileri

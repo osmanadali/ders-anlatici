@@ -2,4 +2,4 @@
 #   pip install -r requirements-klon.txt
 # ~2 GB model indirir. NVIDIA ekran kartı varsa hızlı, yoksa her cümle birkaç saniye sürer.
 # Model lisansı: Coqui Public Model License (kişisel / ticari olmayan kullanım).
-coqui-tts>=0.24
+coqui-tts[codec]>=0.27

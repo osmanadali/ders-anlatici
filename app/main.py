@@ -69,6 +69,19 @@ async def post_settings(patch: dict):
     return save_settings(patch)
 
 
+@app.get("/api/llm-options")
+async def llm_options():
+    from .config import ANTHROPIC_API_KEY, GEMINI_API_KEY
+
+    out = {"claude": bool(ANTHROPIC_API_KEY), "gemini": bool(GEMINI_API_KEY), "active": llm.provider(), "gemini_models": []}
+    if GEMINI_API_KEY:
+        try:
+            out["gemini_models"] = await llm.llm_gemini.list_models()
+        except llm.llm_gemini.GeminiError as e:
+            out["gemini_error"] = str(e)
+    return out
+
+
 @app.get("/api/voice-options")
 async def voice_options():
     return {"edge": voice.EDGE_VOICES, "sample": voice.VOICE_SAMPLE.exists()}
@@ -496,6 +509,7 @@ async def ask(
     )
     messages = session["messages"] + [user_msg]
     sid = session["id"]
+    deep = _wants_deep(settings, mode, style, user_text, attach_names, bool(focus))
     session["timeline"].append(
         {"type": "user", "text": text.strip() or user_text[:200], "attachments": attach_names, "mode": mode}
     )
@@ -505,8 +519,21 @@ async def ask(
         steps: list[dict] = []
         final = None
         prev_say = ""
+        send = messages
         try:
-            async for item in llm.stream_steps(system, messages):
+            if deep:
+                # Önce gerekçeli tam çözüm (öğrenciye gösterilmez), sonra hoca bunu izleyerek anlatır.
+                yield _sse({"type": "status", "message": "Soruyu önce kendi kendime çözüyorum…"})
+                try:
+                    draft = await llm.deep_solution(system, content)
+                    send = messages[:-1] + [{"role": "user", "content": content + [
+                        {"type": "text", "text": f"<cozum_taslagi>\n{draft}\n</cozum_taslagi>"}]}]
+                except llm.TutorError as e:
+                    log.warning("derin çözüm atlandı: %s", e)
+            async for item in llm.stream_steps(system, send):
+                if "notice" in item:
+                    yield _sse({"type": "notice", "message": item["notice"]})
+                    continue
                 if "final" in item:
                     final = item["final"]
                     if item.get("truncated"):
@@ -565,6 +592,22 @@ async def curriculum_import(body: ImportBody):
         return curriculum.import_courses(body.program, body.codes)
     except KeyError:
         raise HTTPException(404, "Program bulunamadı")
+
+
+def _wants_deep(settings: dict, mode: str, style: str, text: str, attachments: list, page: bool) -> bool:
+    """'Önce çöz, sonra anlat' ne zaman çalışsın: problem/soru çözümlerinde (kısa sohbet cümlelerinde değil)."""
+    choice = settings.get("deep_solve", "auto")
+    if choice == "off" or mode == "lecture":
+        return False
+    if choice == "auto" and llm.provider() != "gemini":
+        return False  # Claude zaten derin düşünüyor
+    if attachments:
+        return True
+    if style == "konusma" and len(text) < 60:
+        return False  # "tamam", "anladım", "devam" gibi
+    has_math = any(ch.isdigit() for ch in text) or any(k in text.lower() for k in (
+        "çöz", "hesapla", "bul", "ispat", "türet", "neden", "nasıl", "nereden", "grafi", "soru"))
+    return page or (len(text) > 25 and has_math)
 
 
 # ================================================================ ders anlatım planı

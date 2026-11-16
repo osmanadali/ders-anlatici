@@ -163,6 +163,21 @@
 <dialog id="settingsDlg">
   <form method="dialog" class="settings">
     <h3>Ayarlar</h3>
+    <label>Hocanın beyni
+      <select id="setLlm">
+        <option value="gemini">Gemini: ÜCRETSİZ (günlük kotalı)</option>
+        <option value="claude">Claude: ücretli, en derin anlatım</option>
+      </select>
+    </label>
+    <label class="llm-gemini">Gemini modeli <select id="setGeminiModel"></select></label>
+    <label>Önce çöz, sonra anlat (daha derin ama ilk cümle birkaç saniye gecikir)
+      <select id="setDeep">
+        <option value="auto">Otomatik (Gemini'de açık)</option>
+        <option value="on">Her zaman açık</option>
+        <option value="off">Kapalı</option>
+      </select>
+    </label>
+    <p id="llmInfo" class="muted small"></p>
     <label>Ses kaynağı
       <select id="setProvider">
         <option value="edge">Microsoft Edge sesi: ÜCRETSİZ, hazır Türkçe ses (Emel / Ahmet)</option>

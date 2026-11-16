@@ -8,8 +8,8 @@ from typing import AsyncIterator, Literal
 import anthropic
 from pydantic import BaseModel, Field
 
-from . import prompts
-from .config import ANTHROPIC_API_KEY, load_settings
+from . import llm_gemini, prompts
+from .config import ANTHROPIC_API_KEY, GEMINI_API_KEY, load_settings
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 _client: anthropic.AsyncAnthropic | None = None
@@ -17,6 +17,18 @@ _client: anthropic.AsyncAnthropic | None = None
 
 class TutorError(RuntimeError):
     pass
+
+
+def provider() -> str:
+    """Hocanın beyni: 'claude' ya da 'gemini' (ücretsiz kota)."""
+    p = load_settings().get("llm_provider") or ""
+    if p in ("claude", "gemini"):
+        return p
+    return "gemini" if GEMINI_API_KEY and not ANTHROPIC_API_KEY else "claude"
+
+
+def _can_fallback_to_claude() -> bool:
+    return bool(ANTHROPIC_API_KEY) and load_settings().get("claude_fallback", True)
 
 
 def client() -> anthropic.AsyncAnthropic:
@@ -160,6 +172,31 @@ def build_system(
 
 async def stream_steps(system: list[dict], messages: list[dict]) -> AsyncIterator[dict]:
     """Anlatım adımlarını üretildikçe verir. Son olarak {"final": [...içerik blokları...]} verir."""
+    if provider() == "gemini":
+        parser, full, produced = StepParser(), [], 0
+        try:
+            async for text in llm_gemini.stream_text(system, messages):
+                full.append(text)
+                for obj in parser.feed(text):
+                    step = normalize_step(obj)
+                    if step:
+                        produced += 1
+                        yield step
+            for obj in parser.flush():
+                step = normalize_step(obj)
+                if step:
+                    yield step
+            yield {"final": [{"type": "text", "text": "".join(full)}], "truncated": False}
+            return
+        except llm_gemini.GeminiError as e:
+            if not (e.quota and produced == 0 and _can_fallback_to_claude()):
+                raise TutorError(str(e)) from e
+            yield {"notice": "Gemini ücretsiz kotası doldu; bu cevap için Claude'a geçtim."}
+    async for item in _claude_stream_steps(system, messages):
+        yield item
+
+
+async def _claude_stream_steps(system: list[dict], messages: list[dict]) -> AsyncIterator[dict]:
     s = load_settings()
     parser = StepParser()
     extra = {}
@@ -236,6 +273,16 @@ class Grade(BaseModel):
 
 async def _parse(model_cls, content: list[dict] | str, system: list[dict] | str | None = None, effort: str | None = None,
                  max_tokens: int = 16000):
+    if provider() == "gemini":
+        try:
+            return await llm_gemini.parse(model_cls, content, system, max_tokens)
+        except llm_gemini.GeminiError as e:
+            if not (e.quota and _can_fallback_to_claude()):
+                raise TutorError(str(e)) from e
+    return await _claude_parse(model_cls, content, system, effort, max_tokens)
+
+
+async def _claude_parse(model_cls, content, system=None, effort=None, max_tokens: int = 16000):
     s = load_settings()
     kwargs = {}
     if system:
@@ -312,7 +359,14 @@ async def grade(question: dict, student: str, image: tuple[bytes, str] | None) -
     return await _parse(Grade, content, effort="medium")
 
 
+class PageText(BaseModel):
+    text: str
+
+
 async def ocr_page(png: bytes) -> str:
+    if provider() == "gemini":
+        page = await _parse(PageText, [image_block(png, "image/png"), {"type": "text", "text": prompts.OCR_PAGE}])
+        return page.text.strip()
     s = load_settings()
     resp = await client().messages.create(
         model=s["claude_model"],
@@ -390,3 +444,39 @@ class StudyPlan(BaseModel):
 async def study_plan(course: dict, notes_text: str, full: bool, **kw) -> StudyPlan:
     return await _parse(StudyPlan, prompts.STUDY_PLAN.format(**kw), _notes_system(course, notes_text, full),
                         max_tokens=24000)
+
+
+
+# ---------------------------------------------------------------- derin çözüm (önce çöz, sonra anlat)
+class SolutionStep(BaseModel):
+    islem: str = Field(description="Bu adımda yapılan işlem, LaTeX $...$ ile")
+    gerekce: str = Field(description="Bu adım NEDEN böyle: hangi tanım/kural/teorem/formülden geliyor, o formül nereden çıkıyor")
+
+
+class Solution(BaseModel):
+    konu: str
+    verilenler: str
+    istenen: str
+    yontem: str = Field(description="Hangi yöntemi seçtin ve neden bu yöntem (alternatiflere göre)")
+    on_bilgi: str = Field(description="Çözüm için bilinmesi gereken kavram/formüller ve kısaca nereden geldikleri")
+    adimlar: list[SolutionStep]
+    sonuc: str
+    kontrol: str = Field(description="Sonucu başka bir yolla ya da yerine koyarak doğrulama")
+    sik_hatalar: str
+    puf_noktasi: str
+
+
+async def deep_solution(system: list[dict], user_content: list[dict]) -> str:
+    """Anlatımdan önce, gerekçeli tam çözümü hazırlar; hoca anlatırken bunu izler.
+
+    Yüzeysel cevap veren modellerde (ör. Gemini Flash) derinliği garanti etmek için kullanılır.
+    """
+    task = list(user_content) + [{"type": "text", "text": prompts.DEEP_SOLVE}]
+    sol = await _parse(Solution, task, llm_gemini.system_text(system) if system else None, effort="high")
+    lines = [
+        f"Konu: {sol.konu}", f"Verilenler: {sol.verilenler}", f"İstenen: {sol.istenen}",
+        f"Yöntem ve nedeni: {sol.yontem}", f"Ön bilgi: {sol.on_bilgi}", "Adımlar:",
+        *[f"  {i}. {st.islem}  ← gerekçe: {st.gerekce}" for i, st in enumerate(sol.adimlar, 1)],
+        f"Sonuç: {sol.sonuc}", f"Kontrol: {sol.kontrol}", f"Sık hatalar: {sol.sik_hatalar}", f"Püf noktası: {sol.puf_noktasi}",
+    ]
+    return "\n".join(lines)
