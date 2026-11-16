@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, curriculum, hazir, llm, notes, prompts, store, voice, yerel
+from . import auth, curriculum, hazir, klasor, llm, notes, prompts, siniflandir, store, voice, yerel
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -153,6 +153,9 @@ async def _warm_up():
     # Yerel yapay zeka: ilk açılışta programı ve modeli indirir, sonraki açılışlarda yalnızca başlatır.
     if os.getenv("DERS_ON_YUKLEME", "1") != "0" and load_settings().get("llm_provider") != "gemini":
         yerel.baslat_arka_planda()
+    # Masaüstündeki "Not Kutusu" ve İndirilenler'deki ders paketleri kendiliğinden içe aktarılır
+    if os.getenv("DERS_ON_YUKLEME", "1") != "0":
+        klasor.baslat(otomatik_ekle)
 
 
 @app.on_event("shutdown")
@@ -306,24 +309,105 @@ async def delete_course(course_id: str):
 
 @app.post("/api/courses/{course_id}/docs")
 async def upload_doc(course_id: str, file: UploadFile = File(...)):
-    data = await file.read()
+    return await _add_doc(course_id, file.filename or "belge", await file.read())
+
+
+async def _add_doc(course_id: str, filename: str, data: bytes) -> dict:
+    """Notu derse ekler: sayfalara ayırır, hazır paketi uygular, taranmış sayfaları okumaya sıraya koyar."""
     try:
-        doc = await asyncio.to_thread(notes.add_document, course_id, file.filename or "belge", data)
+        doc = await asyncio.to_thread(notes.add_document, course_id, filename, data)
     except KeyError:
         raise HTTPException(404, "Ders bulunamadı")
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:  # ör. eksik paket, bozuk PDF: sebebi kullanıcıya ve log'a yaz
-        log.exception("not yüklenemedi: %s", file.filename)
+        log.exception("not yüklenemedi: %s", filename)
         raise HTTPException(500, f"{type(e).__name__}: {e}")
     # Hazır ders paketinde varsa: taranmış sayfa metinleri, özet, ders planı… kendiliğinden eklenir
     try:
-        if hazir.apply_to_document(course_id, doc, file.filename or ""):
+        if hazir.apply_to_document(course_id, doc, filename):
             doc = notes.find_doc(notes.get_course(course_id), doc["id"]) or doc
     except Exception:
-        log.exception("hazır paket uygulanamadı: %s", file.filename)
+        log.exception("hazır paket uygulanamadı: %s", filename)
     _schedule_ocr(course_id, doc)
     return doc
+
+
+# ---------------------------------------------------------------- dersini kendisi bulan not ekleme
+async def _ilk_sayfa_metni(filename: str, data: bytes) -> str:
+    """Metni olmayan not (fotoğraf, taranmış PDF): ilk sayfayı yapay zekaya okutur."""
+    if not llm.ai_hazir():
+        return ""
+    try:
+        ext = filename.rsplit(".", 1)[-1].lower()
+        if ext == "pdf":
+            def render() -> bytes:
+                import io as _io
+
+                import pypdfium2 as pdfium
+
+                pdf = pdfium.PdfDocument(data)
+                try:
+                    buf = _io.BytesIO()
+                    pdf[0].render(scale=1.4).to_pil().save(buf, format="PNG")
+                    return buf.getvalue()
+                finally:
+                    pdf.close()
+
+            png = await asyncio.to_thread(render)
+        else:
+            png = data
+        return await llm.ocr_page(png)
+    except Exception as e:
+        log.warning("ilk sayfa okunamadı (%s): %s", filename, e)
+        return ""
+
+
+async def otomatik_ekle(filename: str, data: bytes, ipucu: str = "") -> dict:
+    """Notun dersini bulur (kod → paket → benzerlik → yapay zeka), gerekirse dersi oluşturur ve ekler."""
+    text = await asyncio.to_thread(siniflandir.metin_cikar, filename, data)
+    if len(text.strip()) < 80:
+        text = (text + "\n" + await _ilk_sayfa_metni(filename, data)).strip()
+    s = await asyncio.to_thread(siniflandir.bul, filename, text, ipucu)
+    if (s.course_id is None or s.guven < 0.6) and text.strip() and llm.ai_hazir():
+        s = await siniflandir.bul_yapay_zeka(filename, text, s)
+    s = siniflandir.en_yakin(s)
+    cid, yeni = await asyncio.to_thread(siniflandir.ders_hazirla, s)
+    doc = await _add_doc(cid, filename, data)
+    name = (notes.get_course(cid) or {}).get("name", "")
+    return {"ders_id": cid, "ders_adi": name, "neden": s.neden if s.course_id or s.yeni_ders else "ders bulunamadı",
+            "guven": round(s.guven, 2), "yeni_ders": yeni, "doc": doc, "adaylar": s.adaylar}
+
+
+@app.post("/api/notes/auto")
+async def upload_auto(file: UploadFile = File(...), ipucu: str = Form("")):
+    data = await file.read()
+    name = file.filename or "not"
+    if name.lower().endswith(".json"):
+        try:
+            return {"paket": await asyncio.to_thread(hazir.install_pack, data)}
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    return await otomatik_ekle(name, data, ipucu)
+
+
+class MoveBody(BaseModel):
+    hedef: str
+
+
+@app.post("/api/courses/{course_id}/docs/{doc_id}/move")
+async def move_doc(course_id: str, doc_id: str, body: MoveBody):
+    try:
+        await asyncio.to_thread(notes.move_document, course_id, doc_id, body.hedef)
+    except KeyError as e:
+        raise HTTPException(404, str(e))
+    return {"ok": True}
+
+
+@app.get("/api/kutu")
+async def kutu(son: int = 0):
+    """Not Kutusu klasörü ve sonraki olaylar (arayüz bildirim olarak gösterir)."""
+    return {"yol": str(klasor.kutu_yolu()), "olaylar": [o for o in klasor.OLAYLAR if o["id"] > son]}
 
 
 @app.delete("/api/courses/{course_id}/docs/{doc_id}")

@@ -203,6 +203,27 @@ def set_page_text(course_id: str, doc_id: str, page: int, text: str) -> None:
     save_course(course)
 
 
+def move_document(course_id: str, doc_id: str, target_id: str) -> dict:
+    """Belgeyi (sayfaları, görüntüleri ve okunmuş metinleriyle) başka derse taşır."""
+    src, dst = get_course(course_id), get_course(target_id)
+    if not src or not dst:
+        raise KeyError("ders bulunamadı")
+    doc = find_doc(src, doc_id)
+    if not doc:
+        raise KeyError("belge bulunamadı")
+    if course_id == target_id:
+        return doc
+    old, new = doc_dir(course_id, doc_id), doc_dir(target_id, doc_id)
+    new.parent.mkdir(parents=True, exist_ok=True)
+    if old.exists():
+        shutil.move(str(old), new)
+    dst["docs"].append(doc)
+    save_course(dst)
+    src["docs"] = [d for d in src["docs"] if d["id"] != doc_id]
+    save_course(src)
+    return doc
+
+
 def delete_document(course_id: str, doc_id: str) -> None:
     course = get_course(course_id)
     if not course:

@@ -78,7 +78,7 @@ def test_paket_sonradan_yuklenince_var_olan_notlara_uygulanir(tmp_path, monkeypa
     pack = {"kurs_kodu": "ENM 463", "ders": "Kalite", "konu_anlatimi": "## TKY\n- **Müşteri odaklılık**", "kisa_ozet": "# Özet",
             "denemeler": [deneme], "docs": {"4.DERS (TKY'NIN TEMEL ILKELERI).pdf": {"ocr": {"2": "TKY ilkeleri: Kaizen"}}}}
     r = c.post("/api/hazir", files={"file": ("enm463.json", json.dumps(pack).encode(), "application/json")}).json()
-    assert r["uygulanan"] == 1 and r["dersler"] == [cid]
+    assert r["uygulanan"] == 1 and cid in r["dersler"]
     assert (tmp_path / "kullanici" / "enm463.json").exists()
     course = c.get(f"/api/courses/{cid}").json()
     assert course["denemeler"][0]["baslik"] == "Deneme 1" and "TKY" in course["konu_anlatimi"] and course["kisa_ozet"] == "# Özet"

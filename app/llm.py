@@ -43,6 +43,11 @@ def _backends() -> list[str]:
     return [first, other]
 
 
+def ai_hazir() -> bool:
+    """Şu an bir yapay zeka cevap verebilir mi (yerel hazır ya da Gemini anahtarı var)?"""
+    return yerel.hazir() or bool(gemini_key())
+
+
 def brain_label(p: str | None = None) -> str:
     p = p or provider()
     return "Gemini" if p == "gemini" else f"yerel yapay zeka ({yerel.STATE.get('model') or yerel.secili_model()})"
@@ -54,7 +59,14 @@ def notes_limit() -> int:
 
     if provider() == "gemini":
         return FULL_NOTES_CHAR_LIMIT
-    return max(8000, int(yerel.baglam() * llm_yerel.CHARS_PER_TOKEN * 0.45))
+    return max(8000, int(yerel.baglam() * llm_yerel.CHARS_PER_TOKEN * 0.36))
+
+
+def guide_limit() -> int:
+    """Hazır özetler (course_guide) için karakter bütçesi; 0 = sınırsız (Gemini)."""
+    if provider() == "gemini":
+        return 0
+    return max(3000, int(yerel.baglam() * llm_yerel.CHARS_PER_TOKEN * 0.12))
 
 
 _ERRORS = (llm_gemini.GeminiError, llm_yerel.YerelError)
@@ -198,7 +210,7 @@ def course_knowledge(course: dict | None, notes_text: str, full: bool) -> str:
         parts.append(profile)
     from . import hazir
 
-    guide = hazir.course_guide(course)
+    guide = hazir.course_guide(course, guide_limit())
     if guide:
         parts.append(guide)
     if notes_text:

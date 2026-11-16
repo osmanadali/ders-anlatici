@@ -290,3 +290,8 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 /* yerel yapay zeka */
 fieldset.yerel progress { width: 100%; height: 10px; accent-color: var(--accent); margin: 6px 0; }
 #yerelChip { white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+
+/* sürükle-bırak */
+body.drop::after { content: "📥 Bırak: hangi derse ait olduğunu kendisi bulur"; position: fixed; inset: 12px; border: 3px dashed var(--accent);
+  border-radius: 16px; background: color-mix(in srgb, var(--bg) 80%, transparent); display: grid; place-items: center;
+  font-size: 1.3em; color: var(--accent); z-index: 999; pointer-events: none; }

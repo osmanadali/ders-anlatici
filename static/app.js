@@ -489,11 +489,12 @@
       pendingOcr += ocr + (busy ? 1 : 0);
       const info = d.status ? d.status : `${d.pages.length} ${d.kind === "audio" ? "bölüm" : "sf"}${ocr ? ` · ${ocr} okunuyor…` : ""}`;
       const li = document.createElement("li");
-      li.innerHTML = `<span>${{ pdf: "📕", image: "🖼️", audio: "🎙" }[d.kind] || "📄"}</span><span class="name"></span><span class="muted small"></span><button class="ghost small" title="Sil">🗑</button>`;
+      li.innerHTML = `<span>${{ pdf: "📕", image: "🖼️", audio: "🎙" }[d.kind] || "📄"}</span><span class="name"></span><span class="muted small"></span><button class="ghost small mv" title="Başka derse taşı">↪</button><button class="ghost small del" title="Sil">🗑</button>`;
       li.querySelector(".small").textContent = info;
       li.querySelector(".name").textContent = d.name;
       li.onclick = (e) => { if (e.target.tagName === "BUTTON" || !d.pages.length) return; openViewer(d, 1); };
-      li.querySelector("button").onclick = async () => {
+      li.querySelector(".mv").onclick = () => openMove(d);
+      li.querySelector(".del").onclick = async () => {
         if (!confirm(`“${d.name}” silinsin mi?`)) return;
         await api(`/api/courses/${S.courseId}/docs/${d.id}`, { method: "DELETE" });
         S.course = await api(`/api/courses/${S.courseId}`);
@@ -534,7 +535,7 @@
     $("#askInput").focus();
   };
   $("#docInput").addEventListener("change", async (e) => {
-    if (!S.courseId) { toast("Önce bir ders seç ya da oluştur."); e.target.value = ""; return; }
+    if (!S.courseId) { const f = [...e.target.files]; e.target.value = ""; return autoAdd(f); }  // ders seçilmemiş: kendisi bulsun
     const files = [...e.target.files];
     e.target.value = "";
     for (const [i, f] of files.entries()) {
@@ -686,6 +687,75 @@
     try { await postJSON("/api/yerel/hazirla", { model: $("#setYerelModel").value }); } catch (e) { return toast(e.message); }
     refreshYerel();
   };
+
+  // ================================================================ dersini kendisi bulan not ekleme
+  async function autoAdd(files) {
+    files = [...files].filter((f) => /\.(pdf|png|jpe?g|webp|json)$/i.test(f.name) || f.type.startsWith("image/"));
+    if (!files.length) return;
+    let hint = "", last = null;
+    for (const [i, f] of files.entries()) {
+      $("#uploadStatus").textContent = `Ekleniyor ${i + 1}/${files.length}: ${f.name} (dersi bulunuyor)…`;
+      toast(`📥 ${f.name}: hangi derse ait olduğuna bakılıyor…`, 2500);
+      const fd = new FormData();
+      fd.append("file", f, f.name);
+      fd.append("ipucu", hint);
+      try {
+        const r = await api("/api/notes/auto", { method: "POST", body: fd });
+        if (r.paket) { toast(`📦 Ders paketi kuruldu: ${r.paket.ders_adi || r.paket.id} (${r.paket.belge} belge)`, 6000); last = r.paket.ders_id; continue; }
+        hint = r.ders_id; last = r.ders_id;
+        toast(`📥 ${f.name} → ${r.ders_adi}${r.yeni_ders ? " (yeni ders oluşturuldu)" : ""} · ${r.neden}. Yanlışsa notun yanındaki ↪ ile taşı.`, 7000);
+      } catch (err) { toast(`${f.name}: ${err.message}`); }
+    }
+    $("#uploadStatus").textContent = "";
+    if (last) { await loadCourses(last); switchTab("notes"); }
+  }
+  $("#autoInput").addEventListener("change", (e) => { const f = [...e.target.files]; e.target.value = ""; autoAdd(f); });
+  // Dosyayı pencerenin herhangi bir yerine sürükleyip bırakma
+  window.addEventListener("dragover", (e) => { if (e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); document.body.classList.add("drop"); } });
+  window.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("drop"); });
+  window.addEventListener("drop", (e) => {
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault(); document.body.classList.remove("drop");
+    autoAdd(e.dataTransfer.files);
+  });
+
+  let moving = null;
+  function openMove(d) {
+    moving = d;
+    $("#moveName").textContent = d.name;
+    $("#moveTarget").innerHTML = S.courses.filter((c) => c.id !== S.courseId)
+      .map((c) => `<option value="${c.id}">${c.name.replace(/</g, "&lt;")}</option>`).join("");
+    if (!$("#moveTarget").options.length) return toast("Taşınacak başka ders yok; önce “+ Ders” ile oluştur.");
+    $("#moveDlg").showModal();
+  }
+  $("#moveOk").onclick = async () => {
+    if (!moving) return;
+    const to = $("#moveTarget").value;
+    try {
+      await postJSON(`/api/courses/${S.courseId}/docs/${moving.id}/move`, { hedef: to });
+      toast(`“${moving.name}” taşındı.`);
+      S.course = await api(`/api/courses/${S.courseId}`);
+      renderDocs();
+    } catch (e) { toast("Taşınamadı: " + e.message); }
+    moving = null;
+  };
+
+  // Not Kutusu (Masaüstü) ve İndirilenler'den kendiliğinden eklenenleri bildir
+  let kutuSon = 0;
+  async function kutuKontrol() {
+    try {
+      const k = await api(`/api/kutu?son=${kutuSon}`);
+      $("#kutuInfo").textContent = `📂 Notları ${k.yol} klasörüne de bırakabilirsin: hangi derse ait olduğunu bulup kendiliğinden ekler.`;
+      if (k.olaylar.length) {
+        kutuSon = k.olaylar[k.olaylar.length - 1].id;
+        k.olaylar.forEach((o) => toast(o.mesaj, 7000));
+        const cur = S.courseId;
+        await loadCourses(cur || k.olaylar.find((o) => o.ders_id)?.ders_id);
+      }
+    } catch {}
+  }
+  api("/api/kutu").then((k) => { kutuSon = k.olaylar.length ? k.olaylar[k.olaylar.length - 1].id : 0; kutuKontrol(); }).catch(() => {});
+  setInterval(kutuKontrol, 8000);
 
   // ================================================================ müfredattan ders ekle
   let programs = [];

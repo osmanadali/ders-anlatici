@@ -26,6 +26,9 @@
   <select id="courseSelect" title="Ders"></select>
   <button id="newCourseBtn" class="ghost" title="Yeni ders">+ Ders</button>
   <button id="curriculumBtn" class="ghost" title="Bölüm müfredatından dersleri ekle">📚 Müfredat</button>
+  <label class="ghost file-label" id="autoAddBtn" title="Notu (PDF/fotoğraf) ya da ders paketini ekle: hangi derse ait olduğunu kendisi bulur">📥 Not ekle
+    <input id="autoInput" type="file" accept="application/pdf,image/*,.json,application/json" multiple hidden>
+  </label>
   <div class="spacer"></div>
   <button id="yerelChip" class="ghost small hidden" title="Yerel yapay zeka kurulumu (Ayarlar)"></button>
   <button id="convBtn" class="ghost" title="Mikrofon sürekli açık: konuşarak ders, istediğin an sözünü kes">🎧 Konuşmalı ders</button>
@@ -104,6 +107,7 @@
         <button id="formulaBtn" class="ghost small" title="Notlardan ve müfredattan sınav formül kâğıdı">📄 Formül kâğıdı</button>
         <span id="uploadStatus" class="muted"></span>
       </div>
+      <p id="kutuInfo" class="muted small"></p>
       <div id="profileBox" class="profile-box hidden"></div>
       <ul id="docList" class="doc-list"></ul>
       <div id="pageViewer" class="page-viewer hidden">
@@ -173,6 +177,15 @@
     </div>
   </aside>
 </main>
+
+<dialog id="moveDlg">
+  <form method="dialog" class="settings">
+    <h3>Notu başka derse taşı</h3>
+    <p id="moveName" class="muted"></p>
+    <label>Ders <select id="moveTarget"></select></label>
+    <div class="row"><button value="cancel" class="ghost">Vazgeç</button><button id="moveOk" value="ok" class="primary">Taşı</button></div>
+  </form>
+</dialog>
 
 <dialog id="settingsDlg">
   <form method="dialog" class="settings">
