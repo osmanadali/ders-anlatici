@@ -35,7 +35,13 @@ select, input[type=text], input[type=number], textarea { background: var(--panel
 #courseSelect { min-width: 180px; }
 
 .layout { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 12px; padding: 12px; min-height: 0; }
-@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .side { min-height: 520px; } }
+@media (max-width: 900px) {
+  html, body { height: auto; min-height: 100%; }
+  .layout { grid-template-columns: 1fr; flex: none; }
+  .board-wrap { min-height: 0; }
+  .classroom { flex: none; }
+  .side { min-height: 520px; max-height: 85vh; }
+}
 
 /* ---------------- tahta */
 .board-wrap { display: flex; flex-direction: column; min-height: 0; }
@@ -185,3 +191,40 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .profile-box summary { cursor: pointer; font-weight: 600; }
 .profile-box ol { margin: 6px 0; padding-left: 20px; }
 #planFocus { width: 100%; margin: 6px 0; }
+
+.settings .prov { display: none; flex-direction: column; gap: 8px; }
+.settings[data-prov="elevenlabs"] .prov-elevenlabs, .settings[data-prov="edge"] .prov-edge, .settings[data-prov="xtts"] .prov-xtts { display: flex; }
+#recSample.rec { background: var(--danger); color: #fff; }
+
+.pv-text { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-top: 6px; white-space: pre-wrap; font-size: 13.5px; max-height: 60vh; overflow-y: auto; }
+.today-box { display: flex; flex-direction: column; gap: 6px; }
+.exam-chip { display: inline-block; background: var(--bg); border-radius: 12px; padding: 2px 8px; font-size: 12px; margin: 0 4px 4px 0; }
+.exam-chip b { color: var(--danger); }
+.task { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.task.done { opacity: .55; } .task.done .t-topic { text-decoration: line-through; }
+.task .t-main { flex: 1; min-width: 0; }
+.task .t-topic { font-weight: 600; } .task .t-detail { font-size: 12.5px; color: var(--muted); }
+.task .badge { font-size: 11px; border-radius: 10px; padding: 1px 7px; background: var(--bg); white-space: nowrap; }
+.badge.anlat { color: #2f6f5e; } .badge.tekrar { color: #8a6d00; } .badge.sinav { color: var(--danger); } .badge.formul { color: #3b5bb5; }
+.sched-day { margin: 10px 0 4px; font-weight: 600; font-size: 13px; }
+.sched-day.today { color: var(--accent); }
+
+/* ---------------- telefon */
+@media (max-width: 700px) {
+  .topbar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
+  .brand { font-size: 21px; }
+  #courseSelect { min-width: 0; flex: 1; }
+  .topbar .spacer { display: none; }
+  #newSessionBtn { display: none; }
+  .layout { padding: 6px; gap: 8px; }
+  .classroom { padding: 6px 0 0 6px; }
+  .board { min-height: 46vh; border-width: 6px; }
+  .board-page { padding: 12px 14px 30px; }
+  .b-title { font-size: 30px; } .b-write { font-size: 24px; } .b-math { font-size: 18px; }
+  .teacher { width: 84px; margin-left: -10px; }
+  .teacher-status { font-size: 10px; }
+  .board-bar .caption { order: 10; flex-basis: 100%; white-space: normal; }
+  .side { min-height: 70vh; }
+  .tabs button { padding: 9px 9px; font-size: 13px; }
+  .ask-form textarea { font-size: 16px; } /* iOS yakınlaştırmasın */
+}

@@ -20,6 +20,7 @@ from .config import DATA_DIR, FULL_NOTES_CHAR_LIMIT
 COURSES_DIR = DATA_DIR / "dersler"
 COURSES_DIR.mkdir(parents=True, exist_ok=True)
 
+AUDIO_EXTS = {".mp3", ".m4a", ".wav", ".ogg", ".opus", ".webm", ".aac", ".flac", ".mp4", ".mov", ".mkv", ".amr", ".3gp"}
 IMAGE_EXTS = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 
 
@@ -229,3 +230,45 @@ def detect_page(text: str) -> int | None:
     if not m:
         return None
     return int(m.group(1) or m.group(2))
+
+
+# ---------------------------------------------------------------- ders ses kayıtları
+def add_audio_document(course_id: str, filename: str, data: bytes) -> dict:
+    """Ders ses/video kaydını saklar; metne çevirme ve not çıkarma arka planda yapılır."""
+    course = get_course(course_id)
+    if course is None:
+        raise KeyError("ders bulunamadı")
+    ext = Path(filename).suffix.lower()
+    if ext not in AUDIO_EXTS:
+        raise ValueError("Ses kaydı biçimi desteklenmiyor (mp3, m4a, wav, ogg, webm, mp4...).")
+    doc_id = _new_id()
+    d = doc_dir(course_id, doc_id)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"kaynak{ext}").write_bytes(data)
+    doc = {"id": doc_id, "name": Path(filename).stem, "kind": "audio", "added": time.time(), "pages": [],
+           "status": "Yazıya dökülüyor…"}
+    course["docs"].append(doc)
+    save_course(course)
+    return doc
+
+
+def audio_source(course_id: str, doc_id: str) -> Path | None:
+    return next(iter(sorted(doc_dir(course_id, doc_id).glob("kaynak.*"))), None)
+
+
+def update_doc(course_id: str, doc_id: str, **fields) -> None:
+    course = get_course(course_id)
+    doc = find_doc(course, doc_id) if course else None
+    if not doc:
+        return
+    doc.update(fields)
+    save_course(course)
+
+
+def set_course_field(course_id: str, key: str, value) -> dict | None:
+    course = get_course(course_id)
+    if not course:
+        return None
+    course[key] = value
+    save_course(course)
+    return course

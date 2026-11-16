@@ -8,6 +8,8 @@ import asyncio
 import hashlib
 import json
 import logging
+import time
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -15,11 +17,12 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import curriculum, llm, notes, prompts, store, voice
+from . import auth, curriculum, llm, notes, prompts, store, voice
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
 app = FastAPI(title="Ders Anlatıcı")
+app.middleware("http")(auth.middleware)
 STATIC = ROOT / "static"
 TTS_CACHE = DATA_DIR / "ses_onbellek"
 TTS_CACHE.mkdir(parents=True, exist_ok=True)
@@ -38,6 +41,23 @@ async def index():
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+# ================================================================ telefondan erişim
+@app.get("/giris")
+async def login_page():
+    return auth.login_page()
+
+
+@app.post("/api/login")
+async def login(sifre: str = Form("")):
+    return auth.login_response(sifre, secure=True)
+
+
+@app.get("/api/connect-info")
+async def connect_info():
+    info = auth.phone_info()
+    return {"url": info.get("url", ""), "password": info.get("password", "") or bool(auth.password())}
+
+
 # ================================================================ ayarlar ve sesler
 @app.get("/api/settings")
 async def get_settings():
@@ -47,6 +67,21 @@ async def get_settings():
 @app.post("/api/settings")
 async def post_settings(patch: dict):
     return save_settings(patch)
+
+
+@app.get("/api/voice-options")
+async def voice_options():
+    return {"edge": voice.EDGE_VOICES, "sample": voice.VOICE_SAMPLE.exists()}
+
+
+@app.post("/api/voice-sample")
+async def voice_sample(file: UploadFile = File(...)):
+    """Ücretsiz yerel klon (XTTS) için kendi sesinden 10-30 sn örnek."""
+    try:
+        sec = await asyncio.to_thread(voice.save_voice_sample, await file.read(), file.filename or "")
+    except voice.VoiceError as e:
+        raise HTTPException(400, str(e))
+    return {"seconds": round(sec, 1)}
 
 
 @app.get("/api/voices")
@@ -105,6 +140,161 @@ async def delete_doc(course_id: str, doc_id: str):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------- ders ses kaydı → not
+@app.post("/api/courses/{course_id}/recordings")
+async def upload_recording(course_id: str, file: UploadFile = File(...)):
+    data = await file.read()
+    try:
+        doc = await asyncio.to_thread(notes.add_audio_document, course_id, file.filename or "kayit.mp3", data)
+    except KeyError:
+        raise HTTPException(404, "Ders bulunamadı")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    t = asyncio.create_task(_process_recording(course_id, doc["id"], file.content_type or "audio/mpeg"))
+    _ocr_tasks.add(t)
+    t.add_done_callback(_ocr_tasks.discard)
+    return doc
+
+
+async def _process_recording(course_id: str, doc_id: str, content_type: str) -> None:
+    src = notes.audio_source(course_id, doc_id)
+    try:
+        text = await voice.transcribe_long(src.read_bytes(), src.name, content_type)
+        if len(text) < 30:
+            raise voice.VoiceError("Kayıtta anlaşılır konuşma bulunamadı.")
+        (src.parent / "transkript.txt").write_text(text, "utf-8")
+        notes.update_doc(course_id, doc_id, status="Ders notuna dönüştürülüyor…")
+        organized = await llm.lecture_notes(text, notes.get_course(course_id))
+        pages = [{"n": i + 1, "text": f"## {sec.title}\n\n{sec.content}", "needs_ocr": False, "title": sec.title}
+                 for i, sec in enumerate(organized.sections)]
+        notes.update_doc(course_id, doc_id, pages=pages, status="",
+                         **({"name": organized.title} if organized.title else {}))
+    except (voice.VoiceError, llm.TutorError) as e:
+        notes.update_doc(course_id, doc_id, status=f"Hata: {e}")
+    except Exception as e:  # beklenmeyen hata da kullanıcıya görünsün
+        log.exception("kayıt işleme")
+        notes.update_doc(course_id, doc_id, status=f"Hata: {e}")
+
+
+@app.get("/api/courses/{course_id}/docs/{doc_id}/transcript")
+async def transcript(course_id: str, doc_id: str):
+    f = notes.doc_dir(course_id, doc_id) / "transkript.txt"
+    if not f.exists():
+        raise HTTPException(404)
+    return Response(f.read_text("utf-8"), media_type="text/plain; charset=utf-8")
+
+
+# ---------------------------------------------------------------- formül kâğıdı
+class FocusBody(BaseModel):
+    focus: str = ""
+
+
+@app.get("/api/courses/{course_id}/formula-sheet")
+async def get_formula_sheet(course_id: str):
+    c = notes.get_course(course_id)
+    if not c:
+        raise HTTPException(404)
+    return {"course": c["name"], "sheet": c.get("formula_sheet")}
+
+
+@app.post("/api/courses/{course_id}/formula-sheet")
+async def make_formula_sheet(course_id: str, body: FocusBody):
+    course = notes.get_course(course_id)
+    _require_material(course)
+    nt = notes.notes_context(course, body.focus)
+    try:
+        sheet = await llm.formula_sheet(course, nt.text, nt.full, body.focus)
+    except llm.TutorError as e:
+        raise HTTPException(502, str(e))
+    data = sheet.model_dump() | {"created": time.time(), "focus": body.focus}
+    notes.set_course_field(course_id, "formula_sheet", data)
+    return {"course": course["name"], "sheet": data}
+
+
+# ---------------------------------------------------------------- sınav takvimi
+TR_DAYS = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"]
+
+
+class ScheduleBody(BaseModel):
+    exam_date: str  # YYYY-MM-DD
+    exam_type: str = "vize"
+    scope: str = ""
+    minutes: int = 90
+    today: str = ""  # tarayıcının yerel tarihi
+
+
+@app.post("/api/courses/{course_id}/schedule")
+async def make_schedule(course_id: str, body: ScheduleBody):
+    course = notes.get_course(course_id)
+    _require_material(course)
+    try:
+        today = date.fromisoformat(body.today) if body.today else date.today()
+        exam = date.fromisoformat(body.exam_date)
+    except ValueError:
+        raise HTTPException(400, "Tarih biçimi YYYY-AA-GG olmalı")
+    days_left = (exam - today).days
+    if days_left < 0:
+        raise HTTPException(400, "Sınav tarihi geçmiş")
+    nt = notes.notes_context(course, body.scope)
+    try:
+        plan = await llm.study_plan(
+            course, nt.text, nt.full,
+            today=today.isoformat(), weekday=TR_DAYS[today.weekday()], exam_date=exam.isoformat(),
+            exam_type=body.exam_type, days_left=days_left, minutes=max(15, min(body.minutes, 600)),
+            scope=body.scope or "Sınava kadar işlenen tüm konular (müfredat ve notlar)",
+            weak=store.memory_summary(course_id),
+        )
+    except llm.TutorError as e:
+        raise HTTPException(502, str(e))
+    days = [d.model_dump() for d in plan.days if today.isoformat() <= d.date <= exam.isoformat()]
+    for d in days:
+        for i, t in enumerate(d["tasks"]):
+            t["id"] = f"{d['date']}-{i}"
+    sched = {"exam_date": exam.isoformat(), "exam_type": body.exam_type, "scope": body.scope,
+             "minutes": body.minutes, "created": time.time(), "days": days, "done": {}}
+    notes.set_course_field(course_id, "schedule", sched)
+    return sched
+
+
+class DoneBody(BaseModel):
+    task_id: str
+    done: bool = True
+
+
+@app.post("/api/courses/{course_id}/schedule/done")
+async def schedule_done(course_id: str, body: DoneBody):
+    course = notes.get_course(course_id)
+    if not course or not course.get("schedule"):
+        raise HTTPException(404)
+    sched = course["schedule"]
+    if body.done:
+        sched["done"][body.task_id] = True
+    else:
+        sched["done"].pop(body.task_id, None)
+    notes.set_course_field(course_id, "schedule", sched)
+    return sched
+
+
+@app.get("/api/today")
+async def today_tasks(day: str = ""):
+    """Bütün derslerin bugünkü görevleri ve yaklaşan sınavlar."""
+    d = day or date.today().isoformat()
+    tasks, exams = [], []
+    for c in notes.list_courses():
+        sched = c.get("schedule")
+        if not sched:
+            continue
+        if sched["exam_date"] >= d:
+            exams.append({"course_id": c["id"], "course": c["name"], "exam_date": sched["exam_date"],
+                          "exam_type": sched["exam_type"]})
+        for day_ in sched["days"]:
+            if day_["date"] == d:
+                for t in day_["tasks"]:
+                    tasks.append(t | {"course_id": c["id"], "course": c["name"], "done": t["id"] in sched["done"]})
+    exams.sort(key=lambda e: e["exam_date"])
+    return {"date": d, "tasks": tasks, "exams": exams}
+
+
 @app.get("/api/courses/{course_id}/docs/{doc_id}/pages/{page}.png")
 async def page_image(course_id: str, doc_id: str, page: int):
     p = notes.page_image_path(course_id, doc_id, page)
@@ -140,8 +330,7 @@ def _schedule_ocr(course_id: str, doc: dict) -> None:
 
 # ================================================================ ses
 async def _tts_to_file(path: Path, text: str, prev: str, nxt: str) -> Path:
-    s = load_settings()
-    audio = await voice.synthesize(text, s["voice_id"], s["tts_model"], prev, nxt)
+    audio = await voice.speak(text, prev, nxt)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(audio)
     return path
@@ -161,7 +350,13 @@ async def get_audio(sid: str, idx: int):
                 _audio_tasks.pop((sid, idx), None)
     if not path.exists():
         raise HTTPException(404, "Ses yok")
-    return FileResponse(path, media_type="audio/mpeg")
+    return _audio_response(path)
+
+
+def _audio_response(path: Path) -> FileResponse:
+    with open(path, "rb") as f:
+        head = f.read(4)
+    return FileResponse(path, media_type=voice.sniff_mime(head))
 
 
 class SpeakBody(BaseModel):
@@ -170,14 +365,17 @@ class SpeakBody(BaseModel):
 
 async def _cached_tts(text: str) -> FileResponse:
     s = load_settings()
-    key = hashlib.sha1(f"{s['voice_id']}|{s['tts_model']}|{text}".encode()).hexdigest()
+    if s["tts_provider"] == "browser":
+        raise HTTPException(409, "Tarayıcı sesi seçili")
+    vkey = {"edge": s["edge_voice"], "xtts": "xtts"}.get(s["tts_provider"], s["voice_id"] + s["tts_model"])
+    key = hashlib.sha1(f"{s['tts_provider']}|{vkey}|{text}".encode()).hexdigest()
     path = TTS_CACHE / f"{key}.mp3"
     if not path.exists():
         try:
             await _tts_to_file(path, text[:2500], "", "")
         except voice.VoiceError as e:
             raise HTTPException(502, str(e))
-    return FileResponse(path, media_type="audio/mpeg")
+    return _audio_response(path)
 
 
 @app.post("/api/tts")
@@ -196,7 +394,7 @@ async def tts_get(text: str):
 async def stt(file: UploadFile = File(...)):
     data = await file.read()
     try:
-        text = await voice.transcribe(data, file.filename or "soru.webm", file.content_type or "audio/webm")
+        text = await voice.listen(data, file.filename or "soru.webm", file.content_type or "audio/webm")
     except voice.VoiceError as e:
         raise HTTPException(502, str(e))
     return {"text": text}
@@ -321,7 +519,7 @@ async def ask(
                 idx = session["next_step"]
                 session["next_step"] += 1
                 audio = None
-                if item["say"] and settings.get("tts_enabled", True):
+                if item["say"] and settings["tts_provider"] != "browser":
                     task = asyncio.create_task(_tts_to_file(store.audio_path(sid, idx), item["say"], prev_say, ""))
                     task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
                     _audio_tasks[(sid, idx)] = task

@@ -1,0 +1,11 @@
+# Ücretsiz ses seçenekleri (isteğe bağlı)
+#   pip install -r requirements-ucretsiz.txt
+edge-tts>=7.0          # Microsoft Edge nöral sesleri (Emel / Ahmet), internet gerekir
+faster-whisper>=1.1    # konuşmayı yazıya çevirme, bilgisayarında çalışır
+av>=11,<16             # ses dosyası okuma (faster-whisper 1.2 ile uyumlu sürüm)
+numpy
+
+# Kendi sesinle ÜCRETSİZ klon (XTTS-v2) için ayrıca:
+#   pip install coqui-tts
+# (~2 GB model indirir; NVIDIA ekran kartı varsa hızlı, yoksa işlemcide yavaş çalışır.
+#  Model lisansı: Coqui Public Model License — kişisel/ticari olmayan kullanım.)

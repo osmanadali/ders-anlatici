@@ -15,9 +15,10 @@ Ders notlarını öğrenen, soruları **senin sesinle** (ElevenLabs klonu) anlat
 | Sekme | Ne yapar |
 |---|---|
 | **Sohbet** | Soru çözme, ekran görüntüsü/fotoğraf/PDF ekleme, sesli soru, söz kesme |
-| **Notlar** | Derse PDF/fotoğraf yükleme, sayfa görüntüleyici, “Bu sayfayı anlat”, “Soruya ekle” |
+| **Notlar** | Derse PDF/fotoğraf yükleme, sayfa görüntüleyici, “Bu sayfayı anlat”, “Soruya ekle”, **🎙 Ders kaydı yükle** (hocanın ses/video kaydını yazıya döküp başlıklı ders notuna çevirir), **📄 Formül kâğıdı** (notlardan + müfredattan, yazdırılabilir) |
 | **Ders anlat** | Kaçırdığın dersi notlardan baştan sona bölüm bölüm anlatır (ders planı + otomatik geçiş) |
 | **Sınav** | Notlardan vize/final tarzı soru üretir, cevabını (yazılı ya da çözüm fotoğrafı) puanlar, geri bildirimi sesli okur, “Tahtada çöz ve anlat” |
+| **Takvim** | Sınav tarihini gir → sınava kadar günlük çalışma planı (öğren, 1-3-7 gün aralıklı tekrar, konu sınavları, son günler deneme + formül). “Bugün” kutusu tüm derslerin günlük görevlerini gösterir; her görevde **Başla** ile hoca o konuyu anlatır ya da sınav açılır |
 | **Kayıtlar** | Her anlatım sesiyle kaydedilir: baştan izle, ⚡ ile tahtayı anında göster, kaldığın yerden devam et |
 
 Ayrıca: hoca karakteri (sese göre ağız hareketi, yazma/dinleme/düşünme pozları), isteğe bağlı internette araştırma, hız ayarı (0.8×–1.5×), duraklat/devam (**P**), tahta sayfaları arasında gezinme, **tahtayı PDF indirme**, anlatım seviyesi (basit/normal/ileri), **hafıza**: zorlandığın konuları kaydeder, sonraki anlatımlarda ve sınavlarda bunlara ağırlık verir.
@@ -61,6 +62,31 @@ ve **http://localhost:8000** (Chrome/Edge önerilir). Adres çubuğundaki “Uyg
 2. **Notlar** sekmesinden hocanın PDF'lerini / defter fotoğraflarını yükle (isteğe bağlı ama önerilir).
 3. **🎧 Konuşmalı ders**'i aç ve konuşmaya başla; ya da **Ders anlat** ile baştan dinle, **Sınav** ile kendini test et.
 
+### 📱 Telefondan kullanım
+
+Telefon tarayıcıları mikrofonu yalnızca güvenli (https) adreste açar, bu yüzden ücretsiz bir Cloudflare tüneli kullanılır:
+
+1. Bilgisayara bir kez **cloudflared** kur: `winget install Cloudflare.cloudflared` (Windows) ya da `brew install cloudflared` (Mac).
+2. **Telefondan Kullan.bat** dosyasına çift tıkla (ya da `python baslat.py --telefon`).
+3. Ekranda çıkan adresi/QR kodu telefonda aç, şifreyi gir (uygulamadaki **📱** düğmesi de QR'ı gösterir). Tarayıcı menüsünden “Ana ekrana ekle” ile uygulama gibi kullan.
+
+Bilgisayar açık kaldığı sürece telefondan konuşmalı ders dahil her şey çalışır. Uzaktan girişler şifre ister (kendi şifreni `.env` içinde `ERISIM_SIFRESI=` ile de belirleyebilirsin).
+
+### 💸 Ücretsiz ses seçenekleri
+
+Ayarlar → **Ses kaynağı**:
+
+| Seçenek | Ücret | Sesin | Not |
+|---|---|---|---|
+| ElevenLabs | kredi | **senin klonun**, en doğal | varsayılan |
+| **Yerel klon (XTTS-v2)** | **ücretsiz** | **senin klonun** | bilgisayarında çalışır; Ayarlar'dan 15-30 sn sesini kaydet/yükle. `pip install -r requirements-ucretsiz.txt coqui-tts` (~2 GB model). NVIDIA ekran kartı varsa hızlı, yoksa her cümle birkaç saniye sürer. Model lisansı ticari olmayan kullanım içindir |
+| **Microsoft Edge** | **ücretsiz** | hazır Türkçe ses: Emel (kadın) / Ahmet (erkek) | çok doğal, hızlı, internet gerekir. `pip install -r requirements-ucretsiz.txt` |
+| Tarayıcı | ücretsiz | robotik | kurulum gerekmez |
+
+Konuşmayı yazıya çevirme için de **Whisper** (ücretsiz, bilgisayarında; `large-v3-turbo` modeli Türkçede çok isabetli, ilk açılışta ~1.6 GB indirir) seçilebilir.
+
+> Not: Claude (hocanın beyni) ücretsiz değildir; API kullanımı kadar ödenir. Ses ve konuşma tanımayı ücretsize çevirmek maliyetin büyük kısmını düşürür.
+
 ### Anahtarsız deneme
 
 Arayüzü API anahtarı olmadan, sahte Claude/ElevenLabs cevaplarıyla denemek için:
@@ -97,11 +123,14 @@ app/notes.py     Dersler, PDF/fotoğraf → sayfa metni + görüntü, not bağla
 app/voice.py     ElevenLabs TTS (klon ses) ve STT (sesli soru)
 app/store.py     Kayıtlar ve hafıza (zayıf konular)
 app/curriculum.py, app/mufredat/  Hazır bölüm müfredatları → ders profilleri
+                 (gazi_endustri.json: Gazi Ü. Endüstri Müh. %30 İngilizce, 2026 planı, OBS Bologna'dan)
+app/auth.py      Telefondan erişim için şifre
 baslat.py        Masaüstü penceresinde başlatıcı
 static/board.js  El yazısı tahta: metin açılımı, çizgi çizgi grafik/şekil çizimi, PDF dışa aktarma
 static/player.js Ses + tahta senkron oynatıcı (duraklat, hız, söz kesme)
 static/teacher.js      Hoca karakteri (SVG, ağız senkronu, pozlar)
 static/conversation.js Konuşmalı mod: ses etkinliği algılama, söz kesme, WAV kaydı
+static/formul.html     Yazdırılabilir formül kâğıdı
 static/app.js    Arayüz
 tests/           Birim + API testleri (sahte servislerle), demo sunucu
 ```

@@ -48,8 +48,16 @@ async def fake_synthesize(text, voice_id, model_id, previous_text="", next_text=
     return _beep(max(1.0, min(4.0, len(text) * 0.045)))
 
 
+async def fake_speak(text, previous_text="", next_text=""):
+    return await fake_synthesize(text, "", "")
+
+
 async def fake_transcribe(audio, filename="", content_type=""):
     return "Parabolün tepe noktası nasıl bulunur?"
+
+
+async def fake_transcribe_long(audio, filename="", content_type=""):
+    return "Bugün simpleks yöntemini göreceğiz. Önce standart forma çeviriyoruz, sonra pivot seçiyoruz. " * 20
 
 
 async def fake_plan(course, notes_text, full, focus=""):
@@ -87,11 +95,48 @@ async def fake_voices():
     return [{"voice_id": "zu3iuxxlZoTwzmAUvpNF", "name": "Osman Adalı", "category": "cloned", "language": "tr", "gender": "male", "preview_url": None}]
 
 
+async def fake_lecture_notes(transcript, course):
+    return llm.LectureNotes(title="Simpleks yöntemi (ders kaydı)", sections=[
+        llm.NoteSection(title="Standart form", content="Kısıtları eşitliğe çevir: $x_1 + s_1 = 4$"),
+        llm.NoteSection(title="Pivot seçimi", content="En negatif indirgenmiş maliyet giren değişkendir."),
+    ])
+
+
+async def fake_formula_sheet(course, notes_text, full, focus=""):
+    return llm.FormulaSheet(title="Matematik formül kâğıdı", sections=[
+        llm.FormulaSection(title="Türev", items=[
+            llm.FormulaItem(name="Kuvvet kuralı", tex="\\frac{d}{dx}x^n = n x^{n-1}", note=""),
+            llm.FormulaItem(name="Zincir kuralı", tex="(f\\circ g)'(x)=f'(g(x))\\,g'(x)", note="iç fonksiyonun türevini unutma"),
+        ]),
+        llm.FormulaSection(title="Parabol", items=[
+            llm.FormulaItem(name="Tepe noktası", tex="x_T=-\\frac{b}{2a}", note=""),
+            llm.FormulaItem(name="Diskriminant", tex="\\Delta=b^2-4ac", note="Δ<0 ise reel kök yok"),
+        ]),
+    ])
+
+
+async def fake_study_plan(course, notes_text, full, **kw):
+    from datetime import date, timedelta
+    t = date.fromisoformat(kw["today"])
+    return llm.StudyPlan(days=[
+        llm.StudyDay(date=(t + timedelta(days=i)).isoformat(), tasks=[
+            llm.StudyTask(kind=k, topic=topic, detail=f"{topic}: {k}", minutes=30)
+            for k, topic in ([("anlat", "Parabol"), ("sinav", "Parabol")] if i == 0 else [("tekrar", "Türev"), ("formul", "Formüller")])
+        ]) for i in range(min(3, kw["days_left"] + 1))
+    ])
+
+
 def install():
+    llm.lecture_notes = fake_lecture_notes
+    llm.formula_sheet = fake_formula_sheet
+    llm.study_plan = fake_study_plan
     llm.stream_steps = fake_stream_steps
     main.llm.stream_steps = fake_stream_steps
     voice.synthesize = fake_synthesize
     voice.transcribe = fake_transcribe
+    voice.speak = fake_speak
+    voice.listen = fake_transcribe
+    voice.transcribe_long = fake_transcribe_long
     voice.list_voices = fake_voices
     llm.lecture_plan = fake_plan
     llm.make_quiz = fake_quiz

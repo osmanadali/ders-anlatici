@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.2/math.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon-192.png">
@@ -24,6 +25,7 @@
   <button id="convBtn" class="ghost" title="Mikrofon sürekli açık: konuşarak ders, istediğin an sözünü kes">🎧 Konuşmalı ders</button>
   <span id="micMeter" class="mic-meter hidden"><i></i></span>
   <button id="newSessionBtn" class="ghost" title="Yeni anlatım başlat">Yeni anlatım</button>
+  <button id="phoneBtn" class="ghost" title="Telefondan kullan">📱</button>
   <button id="settingsBtn" class="ghost" title="Ayarlar">⚙ Ayarlar</button>
 </header>
 
@@ -57,6 +59,7 @@
       <button data-tab="notes">Notlar</button>
       <button data-tab="lecture">Ders anlat</button>
       <button data-tab="quiz">Sınav</button>
+      <button data-tab="plan">Takvim</button>
       <button data-tab="records">Kayıtlar</button>
     </nav>
 
@@ -85,6 +88,10 @@
         <label class="primary file-label">Not yükle (PDF / fotoğraf)
           <input id="docInput" type="file" accept="application/pdf,image/*" multiple hidden>
         </label>
+        <label class="ghost small file-label" title="Hocanın ders ses/video kaydı: yazıya döküp düzenli nota çevirir">🎙 Ders kaydı yükle
+          <input id="recInput" type="file" accept="audio/*,video/*" hidden>
+        </label>
+        <button id="formulaBtn" class="ghost small" title="Notlardan ve müfredattan sınav formül kâğıdı">📄 Formül kâğıdı</button>
         <span id="uploadStatus" class="muted"></span>
       </div>
       <div id="profileBox" class="profile-box hidden"></div>
@@ -99,6 +106,7 @@
           <button id="pvExplain" class="primary small">Bu sayfayı anlat</button>
         </div>
         <img id="pvImg" alt="Not sayfası">
+        <div id="pvText" class="pv-text hidden"></div>
       </div>
     </div>
 
@@ -129,6 +137,21 @@
       <ul id="weakList" class="weak-list"><li class="muted">Henüz kayıt yok.</li></ul>
     </div>
 
+    <!-- TAKVİM -->
+    <div class="tab-panel" id="tab-plan">
+      <h4 style="margin:4px 0">Bugün</h4>
+      <div id="todayBox" class="today-box"><p class="muted">Yükleniyor…</p></div>
+      <h4 style="margin:12px 0 4px">Bu ders için sınav takvimi</h4>
+      <div class="quiz-setup">
+        <label>Sınav tarihi <input id="exDate" type="date"></label>
+        <label>Tür <select id="exType"><option>vize</option><option>final</option><option>bütünleme</option><option>quiz</option></select></label>
+        <label>Günlük dk <input id="exMin" type="number" min="15" max="600" step="15" value="90"></label>
+        <label class="grow">Kapsam (boş = sınava kadar tüm konular) <input id="exScope" type="text" placeholder="ör. 1-7. haftalar"></label>
+        <button id="schedBtn" class="primary">Takvim oluştur</button>
+      </div>
+      <div id="schedArea"></div>
+    </div>
+
     <!-- KAYITLAR -->
     <div class="tab-panel" id="tab-records">
       <p class="muted">Her anlatım sesiyle birlikte kaydedilir. Tıklayıp baştan izleyebilir, kaldığın yerden soru sormaya devam edebilirsin.</p>
@@ -140,13 +163,41 @@
 <dialog id="settingsDlg">
   <form method="dialog" class="settings">
     <h3>Ayarlar</h3>
-    <label>Anlatıcı sesi <select id="setVoice"></select></label>
+    <label>Ses kaynağı
+      <select id="setProvider">
+        <option value="elevenlabs">ElevenLabs: kendi klon sesim (ücretli kredi)</option>
+        <option value="xtts">Yerel klon (XTTS): kendi sesim, ÜCRETSİZ, bilgisayarımda çalışır</option>
+        <option value="edge">Microsoft Edge sesi: ÜCRETSİZ, hazır Türkçe ses</option>
+        <option value="browser">Tarayıcı sesi: ücretsiz, robotik</option>
+      </select>
+    </label>
+    <div class="prov prov-elevenlabs">
+      <label>Anlatıcı sesi <select id="setVoice"></select></label>
+      <label>Ses modeli
+        <select id="setTtsModel">
+          <option value="eleven_multilingual_v2">Multilingual v2 (en doğal)</option>
+          <option value="eleven_flash_v2_5">Flash v2.5 (en hızlı, yarı kredi)</option>
+          <option value="eleven_turbo_v2_5">Turbo v2.5</option>
+        </select>
+      </label>
+    </div>
+    <div class="prov prov-edge">
+      <label>Hazır ses <select id="setEdgeVoice"></select></label>
+    </div>
+    <div class="prov prov-xtts">
+      <p class="muted small">Kendi sesinden 15-30 saniyelik temiz bir kayıt gerekir (sessiz oda, normal konuşma). Önerilen metni oku ya da hazır bir ses dosyası yükle.</p>
+      <p class="small"><i>“Merhaba, ben bugün sana dersi anlatacağım. Önce konunun mantığını konuşacağız, sonra tahtada adım adım örnek çözeceğiz. Takıldığın bir yer olursa hemen sözümü kes ve sor; birlikte tekrar bakarız. Hazırsan başlayalım.”</i></p>
+      <div class="row">
+        <button type="button" id="recSample" class="ghost small">🎙 Okuyarak kaydet</button>
+        <label class="ghost small file-label">📁 Dosya yükle <input id="sampleFile" type="file" accept="audio/*" hidden></label>
+        <span id="sampleStatus" class="muted small"></span>
+      </div>
+    </div>
     <button type="button" id="previewVoice" class="ghost small">Sesi dinle</button>
-    <label>Ses modeli
-      <select id="setTtsModel">
-        <option value="eleven_multilingual_v2">Multilingual v2 (en doğal)</option>
-        <option value="eleven_flash_v2_5">Flash v2.5 (en hızlı)</option>
-        <option value="eleven_turbo_v2_5">Turbo v2.5</option>
+    <label>Konuşmayı yazıya çevirme
+      <select id="setStt">
+        <option value="elevenlabs">ElevenLabs Scribe (ücretli kredi)</option>
+        <option value="whisper">Whisper: ÜCRETSİZ, bilgisayarımda çalışır</option>
       </select>
     </label>
     <label>Anlatım seviyesi
@@ -155,7 +206,6 @@
     <label>Düşünme derinliği
       <select id="setEffort"><option value="low">Hızlı</option><option value="medium">Dengeli</option><option value="high">Derin (zor sorular)</option></select>
     </label>
-    <label class="check"><input id="setTts" type="checkbox"> Klon sesle konuş (kapalıysa tarayıcı sesi)</label>
     <label class="check"><input id="setWeb" type="checkbox"> Gerekirse internette araştırabilsin (daha yavaş)</label>
     <label>Konuşmalı modda mikrofon hassasiyeti
       <input id="setSens" type="range" min="0.6" max="1.6" step="0.1" value="1">
@@ -171,6 +221,14 @@
     <p id="curNote" class="muted small"></p>
     <div id="curList" class="cur-list"></div>
     <menu><button value="cancel" class="ghost">Kapat</button><button id="curImport" value="ok" class="primary">Seçilenleri ekle</button></menu>
+  </form>
+</dialog>
+
+<dialog id="phoneDlg">
+  <form method="dialog" class="settings">
+    <h3>📱 Telefondan kullan</h3>
+    <div id="phoneBody"></div>
+    <menu><button value="cancel" class="primary">Tamam</button></menu>
   </form>
 </dialog>
 

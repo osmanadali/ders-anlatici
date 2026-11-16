@@ -45,8 +45,9 @@ def import_courses(program_id: str, codes: list[str]) -> list[dict]:
     for d in data.get("dersler", []):
         if d.get("kod") not in wanted:
             continue
-        profile = {k: d.get(k) for k in ("kod", "ad", "ad_en", "yariyil", "tur", "dil", "akts", "icerik",
-                                         "haftalik_konular", "kaynak_kitaplar", "on_kosul")}
+        profile = {k: d.get(k) for k in ("kod", "ad", "ad_en", "yariyil", "tur", "dil", "akts", "amac", "icerik",
+                                         "icerik_en", "ogrenme_ciktilari", "haftalik_konular", "haftalik_konular_en",
+                                         "kaynak_kitaplar", "on_kosul", "degerlendirme", "kaynak_url")}
         profile["program"] = data.get("program", "")
         name = f"{d.get('kod', '')} {d.get('ad', '')}".strip()
         course = existing.get(d.get("kod"))

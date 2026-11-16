@@ -4,6 +4,9 @@ Sunucuyu arka planda başlatır ve Chrome/Edge'i adres çubuğu olmayan kendi pe
 ("uygulama modu") açar. Pencere kapatılınca sunucu da kapanır.
 
     python baslat.py            (Windows'ta "Ders Anlatıcı.bat" dosyasına çift tıkla)
+    python baslat.py --telefon  telefondan da kullan: güvenli (HTTPS) bir adres ve şifre üretir, QR kodu gösterir
+                                (cloudflared kurulu olmalı: Windows "winget install Cloudflare.cloudflared",
+                                 Mac "brew install cloudflared")
 """
 from __future__ import annotations
 
@@ -48,9 +51,45 @@ def find_browser() -> str | None:
     return None
 
 
+def start_tunnel(port: int) -> tuple[subprocess.Popen | None, str]:
+    """Cloudflare hızlı tüneli: hesap gerektirmez, https://....trycloudflare.com adresi verir."""
+    import re
+
+    exe = shutil.which("cloudflared")
+    if not exe:
+        print("! cloudflared bulunamadı. Kurulum: Windows → winget install Cloudflare.cloudflared | Mac → brew install cloudflared")
+        return None, ""
+    proc = subprocess.Popen([exe, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{port}"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    deadline = time.time() + 40
+    while time.time() < deadline and proc.stdout:
+        line = proc.stdout.readline()
+        if m := re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", line):
+            threading.Thread(target=lambda: [None for _ in proc.stdout], daemon=True).start()  # çıktıyı boşalt
+            return proc, m.group(0)
+    print("! Tünel adresi alınamadı.")
+    proc.terminate()
+    return None, ""
+
+
+def print_qr(url: str) -> None:
+    try:
+        import qrcode
+
+        q = qrcode.QRCode(border=1)
+        q.add_data(url)
+        q.print_ascii(invert=True)
+    except ImportError:
+        pass  # QR uygulama içindeki 📱 Telefon penceresinde de var
+
+
 def main() -> None:
+    import json
+    import secrets
+
     import uvicorn
 
+    phone = "--telefon" in sys.argv
     port = free_port(int(os.getenv("PORT", "8000")))
     url = f"http://127.0.0.1:{port}/"
     server = uvicorn.Server(uvicorn.Config("app.main:app", host="127.0.0.1", port=port, log_level="warning"))
@@ -59,6 +98,21 @@ def main() -> None:
         if server.started:
             break
         time.sleep(0.1)
+
+    tunnel, phone_file = None, ROOT / os.getenv("DATA_DIR", "veri") / "telefon.json"
+    if phone:
+        from dotenv import load_dotenv
+
+        load_dotenv(ROOT / ".env")
+        password = os.getenv("ERISIM_SIFRESI") or "-".join(secrets.choice(
+            ["kalem", "tahta", "defter", "silgi", "kitap", "sinav", "formul", "integral", "turev", "matris"]) for _ in range(2)
+        ) + str(secrets.randbelow(90) + 10)
+        tunnel, public = start_tunnel(port)
+        if public:
+            phone_file.parent.mkdir(parents=True, exist_ok=True)
+            phone_file.write_text(json.dumps({"url": public, "password": password}), "utf-8")
+            print(f"\n📱 Telefondan aç: {public}\n   Şifre: {password}\n")
+            print_qr(public)
 
     browser = find_browser()
     if browser:
@@ -76,6 +130,9 @@ def main() -> None:
         except KeyboardInterrupt:
             pass
     server.should_exit = True
+    if tunnel:
+        tunnel.terminate()
+        phone_file.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

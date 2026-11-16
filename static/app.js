@@ -80,6 +80,7 @@
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
     if (name === "records") loadRecords();
     if (name === "quiz") loadWeak();
+    if (name === "plan") loadPlanTab();
   }
   document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
@@ -367,6 +368,7 @@
     $("#planList").innerHTML = ""; $("#planStatus").textContent = "";
     renderDocs();
     loadWeak();
+    if ($("#tab-plan").classList.contains("active")) loadPlanTab();
   }
   $("#courseSelect").onchange = (e) => { S.sessionId = ""; selectCourse(e.target.value); };
   $("#newCourseBtn").onclick = async () => {
@@ -398,11 +400,14 @@
     let pendingOcr = 0;
     S.course.docs.forEach((d) => {
       const ocr = d.pages.filter((p) => p.needs_ocr).length;
-      pendingOcr += ocr;
+      const busy = d.status && !d.status.startsWith("Hata");
+      pendingOcr += ocr + (busy ? 1 : 0);
+      const info = d.status ? d.status : `${d.pages.length} ${d.kind === "audio" ? "bölüm" : "sf"}${ocr ? ` · ${ocr} okunuyor…` : ""}`;
       const li = document.createElement("li");
-      li.innerHTML = `<span>${d.kind === "pdf" ? "📕" : "🖼️"}</span><span class="name"></span><span class="muted small">${d.pages.length} sf${ocr ? ` · ${ocr} okunuyor…` : ""}</span><button class="ghost small" title="Sil">🗑</button>`;
+      li.innerHTML = `<span>${{ pdf: "📕", image: "🖼️", audio: "🎙" }[d.kind] || "📄"}</span><span class="name"></span><span class="muted small"></span><button class="ghost small" title="Sil">🗑</button>`;
+      li.querySelector(".small").textContent = info;
       li.querySelector(".name").textContent = d.name;
-      li.onclick = (e) => { if (e.target.tagName === "BUTTON") return; openViewer(d, 1); };
+      li.onclick = (e) => { if (e.target.tagName === "BUTTON" || !d.pages.length) return; openViewer(d, 1); };
       li.querySelector("button").onclick = async () => {
         if (!confirm(`“${d.name}” silinsin mi?`)) return;
         await api(`/api/courses/${S.courseId}/docs/${d.id}`, { method: "DELETE" });
@@ -420,7 +425,13 @@
     S.viewer = { doc, page: Math.max(1, Math.min(page, doc.pages.length)) };
     $("#pageViewer").classList.remove("hidden");
     $("#pvLabel").textContent = `${doc.name} — sayfa ${S.viewer.page}/${doc.pages.length}`;
-    $("#pvImg").src = `/api/courses/${S.courseId}/docs/${doc.id}/pages/${S.viewer.page}.png`;
+    const isText = doc.kind === "audio";
+    $("#pvImg").classList.toggle("hidden", isText);
+    $("#pvText").classList.toggle("hidden", !isText);
+    if (isText) $("#pvText").innerHTML = BoardUtil.renderInline(doc.pages[S.viewer.page - 1]?.text || "")
+      + `<p><a href="/api/courses/${S.courseId}/docs/${doc.id}/transcript" target="_blank">Ham transkripti aç</a></p>`;
+    else $("#pvImg").src = `/api/courses/${S.courseId}/docs/${doc.id}/pages/${S.viewer.page}.png`;
+    if (isText) $("#pvLabel").textContent = `${doc.name} — bölüm ${S.viewer.page}/${doc.pages.length}`;
     document.querySelectorAll("#docList li").forEach((li, i) => li.classList.toggle("active", S.course.docs[i]?.id === doc.id));
   }
   $("#pvPrev").onclick = () => openViewer(S.viewer.doc, S.viewer.page - 1);
@@ -481,6 +492,113 @@
     const made = await postJSON("/api/curriculum/import", { program: $("#curProgram").value, codes });
     toast(`${made.length} ders eklendi. Her birinin hocası müfredattaki konuları biliyor.`);
     await loadCourses(made[0]?.id);
+  };
+
+  // ================================================================ ders ses kaydı
+  $("#recInput").addEventListener("change", async (e) => {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!S.courseId) return toast("Önce bir ders seç.");
+    $("#uploadStatus").textContent = `Kayıt yükleniyor (${(f.size / 1e6).toFixed(0)} MB)…`;
+    const fd = new FormData();
+    fd.append("file", f, f.name);
+    try {
+      await api(`/api/courses/${S.courseId}/recordings`, { method: "POST", body: fd });
+      toast("Kayıt yüklendi. Yazıya dökülüp ders notuna çevriliyor; bitince listede görünecek.", 6000);
+    } catch (err) { toast("Kayıt yüklenemedi: " + err.message); }
+    $("#uploadStatus").textContent = "";
+    S.course = await api(`/api/courses/${S.courseId}`);
+    renderDocs();
+  });
+  $("#formulaBtn").onclick = () => {
+    if (!S.courseId) return toast("Önce bir ders seç.");
+    window.open(`/static/formul.html?c=${S.courseId}`, "_blank");
+  };
+
+  // ================================================================ sınav takvimi
+  const localDate = (d = new Date()) => d.toLocaleDateString("sv-SE");
+  const KIND = { anlat: "Öğren", tekrar: "Tekrar", sinav: "Sına", formul: "Formül" };
+  function taskEl(t, courseId, courseName, done) {
+    const el = document.createElement("div");
+    el.className = "task" + (done ? " done" : "");
+    el.innerHTML = `<input type="checkbox" ${done ? "checked" : ""} title="Yaptım">
+      <div class="t-main"><div><span class="badge ${t.kind}">${KIND[t.kind] || t.kind}</span> <span class="t-topic"></span> <span class="muted small">${t.minutes} dk${courseName ? " · " + courseName : ""}</span></div><div class="t-detail"></div></div>
+      <button class="ghost small">Başla</button>`;
+    el.querySelector(".t-topic").textContent = t.topic;
+    el.querySelector(".t-detail").textContent = t.detail;
+    el.querySelector("input").onchange = async (e) => {
+      await postJSON(`/api/courses/${courseId}/schedule/done`, { task_id: t.id, done: e.target.checked });
+      el.classList.toggle("done", e.target.checked);
+    };
+    el.querySelector("button").onclick = () => startTask(t, courseId);
+    return el;
+  }
+  async function startTask(t, courseId) {
+    if (courseId !== S.courseId) { $("#courseSelect").value = courseId; await selectCourse(courseId); S.sessionId = ""; }
+    if (t.kind === "sinav") {
+      switchTab("quiz");
+      $("#qTopic").value = t.topic === "Genel deneme" ? "" : t.topic;
+      $("#quizBtn").click();
+    } else if (t.kind === "formul") {
+      window.open(`/static/formul.html?c=${courseId}`, "_blank");
+    } else {
+      switchTab("chat");
+      const what = t.kind === "tekrar" ? "Kısa bir tekrar yapalım, en önemli noktaları ve sık yapılan hataları hatırlat, sonunda bana bir soru sor" : "Bu konuyu bana baştan anlat ve bir örnek çöz";
+      ask({ text: `Çalışma takvimimdeki bugünkü görev: ${t.topic}. (${t.detail}) ${what}.`, label: `📅 ${KIND[t.kind]}: ${t.topic}` });
+    }
+  }
+  async function loadPlanTab() {
+    const box = $("#todayBox");
+    try {
+      const td = await api(`/api/today?day=${localDate()}`);
+      box.innerHTML = "";
+      if (td.exams.length) {
+        const ex = document.createElement("div");
+        ex.innerHTML = td.exams.map((e) => {
+          const left = Math.round((new Date(e.exam_date) - new Date(localDate())) / 864e5);
+          return `<span class="exam-chip">${e.course.replace(/</g, "&lt;")} ${e.exam_type}: <b>${left === 0 ? "BUGÜN" : left + " gün"}</b></span>`;
+        }).join("");
+        box.appendChild(ex);
+      }
+      if (!td.tasks.length) box.insertAdjacentHTML("beforeend", '<p class="muted">Bugün için görev yok. Aşağıdan bir sınav takvimi oluştur.</p>');
+      td.tasks.forEach((t) => box.appendChild(taskEl(t, t.course_id, t.course, t.done)));
+    } catch (e) { box.innerHTML = `<p class="muted">${e.message}</p>`; }
+    renderSchedule();
+  }
+  function renderSchedule() {
+    const area = $("#schedArea");
+    area.innerHTML = "";
+    const sc = S.course?.schedule;
+    if (!S.course) { area.innerHTML = '<p class="muted">Ders seçilmedi.</p>'; return; }
+    if (!sc) { area.innerHTML = '<p class="muted">Bu ders için takvim yok.</p>'; return; }
+    $("#exDate").value = sc.exam_date; $("#exType").value = sc.exam_type; $("#exMin").value = sc.minutes; $("#exScope").value = sc.scope || "";
+    const today = localDate();
+    const total = sc.days.reduce((a, d) => a + d.tasks.length, 0), done = Object.keys(sc.done).length;
+    area.insertAdjacentHTML("beforeend", `<p class="muted">İlerleme: ${done}/${total} görev</p>`);
+    sc.days.forEach((d) => {
+      const h = document.createElement("div");
+      h.className = "sched-day" + (d.date === today ? " today" : "");
+      const dt = new Date(d.date + "T12:00");
+      h.textContent = dt.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" }) + (d.date === today ? " · bugün" : "") + (d.date === sc.exam_date ? " · SINAV" : "");
+      area.appendChild(h);
+      d.tasks.forEach((t) => area.appendChild(taskEl(t, S.courseId, "", !!sc.done[t.id])));
+    });
+  }
+  $("#schedBtn").onclick = async () => {
+    if (!S.courseId) return toast("Önce bir ders seç.");
+    if (!$("#exDate").value) return toast("Sınav tarihini seç.");
+    $("#schedBtn").disabled = true;
+    $("#schedArea").innerHTML = '<p class="muted">Takvim hazırlanıyor… (konuları ve zayıf noktalarını hesaba katıyorum)</p>';
+    try {
+      await postJSON(`/api/courses/${S.courseId}/schedule`, {
+        exam_date: $("#exDate").value, exam_type: $("#exType").value, minutes: Number($("#exMin").value) || 90,
+        scope: $("#exScope").value.trim(), today: localDate(),
+      });
+      S.course = await api(`/api/courses/${S.courseId}`);
+      loadPlanTab();
+    } catch (e) { $("#schedArea").innerHTML = ""; toast("Hata: " + e.message); }
+    $("#schedBtn").disabled = false;
   };
 
   // ================================================================ dersi baştan anlat
@@ -695,10 +813,18 @@
     $("#setTtsModel").value = st.tts_model;
     $("#setLevel").value = st.level;
     $("#setEffort").value = st.effort;
-    $("#setTts").checked = st.tts_enabled !== false;
+    $("#setProvider").value = st.tts_provider || "elevenlabs";
+    $("#setStt").value = st.stt_provider || "elevenlabs";
+    $(".settings").dataset.prov = $("#setProvider").value;
+    api("/api/voice-options").then((o) => {
+      $("#setEdgeVoice").innerHTML = Object.entries(o.edge).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+      $("#setEdgeVoice").value = st.edge_voice;
+      $("#sampleStatus").textContent = o.sample ? "✔ Ses örneği kayıtlı" : "Henüz ses örneği yok";
+    }).catch(() => {});
     $("#setWeb").checked = !!st.web_search;
     $("#setSens").value = localGet("sens") || "1";
     $("#settingsDlg").showModal();
+    if (st.tts_provider !== "elevenlabs") return;
     try {
       const voices = await api("/api/voices");
       sel.innerHTML = voices.map((v) => {
@@ -708,20 +834,64 @@
       sel.value = st.voice_id;
     } catch (e) { toast("Ses listesi alınamadı: " + e.message); }
   };
-  $("#previewVoice").onclick = () => {
+  $("#setProvider").onchange = async (e) => {
+    $(".settings").dataset.prov = e.target.value;
+    if (e.target.value === "elevenlabs" && $("#setVoice").options.length < 2) {
+      try {
+        const voices = await api("/api/voices");
+        $("#setVoice").innerHTML = voices.map((v) => `<option value="${v.voice_id}" data-name="${v.name.replace(/"/g, "")}" data-preview="${v.preview_url || ""}">${v.name} (${v.category === "cloned" ? "🎙 klon" : v.language})</option>`).join("");
+        $("#setVoice").value = S.settings.voice_id;
+      } catch (err) { toast("Ses listesi alınamadı: " + err.message); }
+    }
+  };
+  $("#previewVoice").onclick = async () => {
+    const prov = $("#setProvider").value;
     const o = $("#setVoice").selectedOptions[0];
-    if (o?.dataset.preview) new Audio(o.dataset.preview).play();
-    else speak("Merhaba, bugün birlikte çalışalım. Takıldığın yeri bana sorabilirsin.");
+    if (prov === "elevenlabs" && o?.dataset.preview) return new Audio(o.dataset.preview).play();
+    await $("#saveSettings").onclick();  // seçimi kaydedip o sesle örnek cümle söylet
+    toast(prov === "xtts" ? "Yerel klon ilk seferde modeli yüklüyor, biraz sürebilir…" : "Örnek cümle hazırlanıyor…");
+    speak("Merhaba, bugün birlikte çalışalım. Takıldığın yeri bana sorabilirsin.");
+  };
+  async function uploadSample(blob, name) {
+    $("#sampleStatus").textContent = "Yükleniyor…";
+    const fd = new FormData();
+    fd.append("file", blob, name);
+    try {
+      const r = await api("/api/voice-sample", { method: "POST", body: fd });
+      $("#sampleStatus").textContent = `✔ ${r.seconds} sn ses örneği kaydedildi`;
+    } catch (e) { $("#sampleStatus").textContent = "Hata: " + e.message; }
+  }
+  $("#sampleFile").onchange = (e) => { const f = e.target.files[0]; if (f) uploadSample(f, f.name); e.target.value = ""; };
+  let sampleRec = null;
+  $("#recSample").onclick = async () => {
+    if (sampleRec) { sampleRec.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true } });
+      const parts = [];
+      sampleRec = new MediaRecorder(stream);
+      sampleRec.ondataavailable = (e) => e.data.size && parts.push(e.data);
+      sampleRec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        $("#recSample").classList.remove("rec"); $("#recSample").textContent = "🎙 Okuyarak kaydet";
+        uploadSample(new Blob(parts, { type: sampleRec.mimeType }), "ornek.webm");
+        sampleRec = null;
+      };
+      sampleRec.start();
+      $("#recSample").classList.add("rec"); $("#recSample").textContent = "⏹ Bitir";
+      $("#sampleStatus").textContent = "Kaydediliyor… metni okuyunca Bitir'e bas";
+    } catch (e) { toast("Mikrofon açılamadı: " + e.message); }
   };
   $("#saveSettings").onclick = async () => {
     const o = $("#setVoice").selectedOptions[0];
     S.settings = await postJSON("/api/settings", {
-      voice_id: $("#setVoice").value,
-      voice_name: o?.dataset.name || o?.textContent || "",
+      voice_id: $("#setVoice").value || S.settings.voice_id,
+      voice_name: o?.dataset.name || o?.textContent || S.settings.voice_name,
       tts_model: $("#setTtsModel").value,
       level: $("#setLevel").value,
       effort: $("#setEffort").value,
-      tts_enabled: $("#setTts").checked,
+      tts_provider: $("#setProvider").value,
+      edge_voice: $("#setEdgeVoice").value || S.settings.edge_voice,
+      stt_provider: $("#setStt").value,
       web_search: $("#setWeb").checked,
     });
     localSet("sens", $("#setSens").value);
@@ -731,6 +901,27 @@
 
   function localGet(k) { try { return localStorage.getItem("ders." + k); } catch { return null; } }
   function localSet(k, v) { try { localStorage.setItem("ders." + k, v); } catch {} }
+
+  // ================================================================ telefon
+  $("#phoneBtn").onclick = async () => {
+    const info = await api("/api/connect-info").catch(() => ({}));
+    const body = $("#phoneBody");
+    if (info.url) {
+      let qr = "";
+      if (window.qrcode) { const q = qrcode(0, "M"); q.addData(info.url); q.make(); qr = q.createSvgTag({ cellSize: 5, margin: 2 }); }
+      body.innerHTML = `<div style="text-align:center;background:#fff;border-radius:8px;padding:8px">${qr}</div>
+        <p>Telefonun kamerasıyla QR kodu okut ya da adresi aç:<br><a href="${info.url}" target="_blank">${info.url}</a></p>
+        ${typeof info.password === "string" ? `<p>Şifre: <b>${info.password.replace(/</g, "&lt;")}</b></p>` : ""}
+        <p class="muted small">Açılınca tarayıcı menüsünden “Ana ekrana ekle” dersen uygulama gibi çalışır. Bilgisayar açık ve uygulama çalışıyor olmalı.</p>`;
+    } else {
+      body.innerHTML = `<p>Telefondan kullanmak için uygulamayı bilgisayarda <b>telefon modunda</b> başlat:</p>
+        <ol><li>Bir kez <b>cloudflared</b> kur (ücretsiz):<br><code>winget install Cloudflare.cloudflared</code> (Windows) ya da <code>brew install cloudflared</code> (Mac)</li>
+        <li><b>Telefondan Kullan.bat</b> dosyasına çift tıkla (ya da <code>python baslat.py --telefon</code>).</li>
+        <li>Bu pencereyi tekrar aç: QR kod ve şifre burada görünecek.</li></ol>
+        <p class="muted small">Neden gerekli? Telefon tarayıcıları mikrofonu yalnızca güvenli (https) adreslerde açar. Tünel bu adresi ücretsiz verir; şifre de başkalarının girmesini engeller.</p>`;
+    }
+    $("#phoneDlg").showModal();
+  };
 
   // ================================================================ başlat
   loadSettings().catch(() => {});

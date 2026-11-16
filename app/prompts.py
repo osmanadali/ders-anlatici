@@ -1,6 +1,9 @@
 """Claude'a verilen talimatlar. Asıl sihir burada: model cevabı tek seferde yazmıyor,
 'konuş + tahtaya yaz' adımlarına bölüyor; arayüz her adımı sesle eşzamanlı canlandırıyor."""
 
+import json
+
+
 TUTOR_SYSTEM = r"""Sen sabırlı, samimi ve çok iyi anlatan bir Türk üniversite hocasısın; anlattığın dersin alanında uzman bir öğretim üyesisin. Öğrencin derse gidemediği ya da derste anlamadığı konuları evde senden öğreniyor. Sınıfta, tahtanın önündesin: sesli anlatıyorsun ve aynı anda tahtaya el yazısıyla yazıyorsun; birebir özel ders veriyorsun.
 
 # BİLGİ KAYNAĞIN
@@ -136,13 +139,58 @@ def course_profile_block(course: dict) -> str:
         lines.append(f"Yarıyıl: {p['yariyil']}" + (f" | Dersin dili: {p['dil']}" if p.get("dil") else ""))
     if p.get("on_kosul"):
         lines.append(f"Ön koşul: {p['on_kosul']}")
+    if p.get("amac"):
+        lines.append(f"Amaç: {p['amac']}")
     if p.get("icerik"):
         lines.append(f"İçerik: {p['icerik']}")
+    if p.get("icerik_en") and p.get("dil") == "İngilizce":
+        lines.append(f"Content (EN): {p['icerik_en']}")
+    if p.get("ogrenme_ciktilari"):
+        oc = p["ogrenme_ciktilari"]
+        lines.append("Öğrenme çıktıları: " + ("; ".join(oc) if isinstance(oc, list) else str(oc)))
     if p.get("haftalik_konular"):
         lines.append("Haftalık konular:\n" + "\n".join(f"  {i}. hafta: {t}" for i, t in enumerate(p["haftalik_konular"], 1)))
+    if p.get("haftalik_konular_en") and p.get("dil") == "İngilizce":
+        lines.append("Weekly topics (EN): " + " | ".join(p["haftalik_konular_en"]))
+    if p.get("degerlendirme"):
+        dg = p["degerlendirme"]
+        lines.append("Değerlendirme: " + (json.dumps(dg, ensure_ascii=False) if not isinstance(dg, str) else dg))
     if p.get("kaynak_kitaplar"):
         lines.append("Kaynak kitaplar: " + "; ".join(p["kaynak_kitaplar"]))
     lines.append(
         "Bu dersin uzman hocası olarak, müfredattaki tüm konuları notlar olmasa da kaynak kitaplar düzeyinde anlatabilirsin."
     )
     return "\n".join(lines)
+
+
+LECTURE_NOTES = """Aşağıda bir üniversite dersinin ses kaydından otomatik çıkarılmış metin (transkript) var: hocanın sınıfta anlattıkları.
+Bunu öğrencinin çalışabileceği düzenli DERS NOTUNA çevir:
+- Konuları başlıklara ayır, sırayı koru. Her bölüm 1500-3500 karakter olsun.
+- Tanımları, formülleri ($...$ ile LaTeX), çözülen örnekleri adım adım ve hocanın vurguladığı noktaları ("bu sınavda çıkar" gibi) mutlaka yaz.
+- Konuşma dilindeki tekrarları, "eee" gibi dolguları, ders dışı konuşmaları at.
+- Transkriptte yanlış duyulmuş terimler olabilir; bağlamdan doğrusunu çıkar (ör. "simpleks", "türev").
+- Hocanın kendi örneklerini ve gösterimini koru; kendinden bilgi eklersen [Ek bilgi: ...] diye işaretle.
+{context}
+<transkript>
+{transcript}
+</transkript>"""
+
+FORMULA_SHEET = """Bu dersin sınavı için tek sayfalık (gerekirse iki) bir FORMÜL KÂĞIDI hazırla.
+- Ders notlarındaki ve müfredattaki konuların hepsini kapsasın; konu sırasına göre bölümlere ayır.
+- Her madde: kısa ad, LaTeX formül (dolar işaretsiz), gerekirse tek satırlık not (ne zaman kullanılır, koşullar, birimler, sık hata).
+- Notlarda hocanın kullandığı gösterimi kullan. Gereksiz uzun açıklama yok; sınavdan önceki son 10 dakikada bakılacak bir kâğıt.
+- Formül olmayan ama ezberlenmesi gereken kurallar (ör. simpleks durma koşulu) da madde olabilir; o zaman formül alanını boş bırak.
+{focus}"""
+
+STUDY_PLAN = """Öğrenci için sınava kadar günlük çalışma takvimi hazırla.
+Bugün: {today} ({weekday}). Sınav: {exam_date} ({exam_type}). Sınava {days_left} gün var.
+Günlük ayırabileceği süre: yaklaşık {minutes} dakika.
+Kapsam: {scope}
+{weak}
+İlkeler:
+- Önce kapsamdaki konuları sırayla öğren ("anlat" görevleri), her konuyu 1, 3 ve 7 gün sonra kısa tekrar et ("tekrar"), aralarda konu sınavları ("sinav") koy.
+- Zayıf konulara daha çok zaman ayır.
+- Son 2 gün: genel deneme sınavı ("sinav", konu: "Genel deneme") ve formül kâğıdı tekrarı ("formul"). Sınav günü sadece hafif tekrar.
+- Gün sayısı azsa öncelik sırası: sınavda en çok çıkan/temel konular.
+- Her gün için tarih (YYYY-MM-DD) ve görevler ver; görevlerin toplam süresi günlük süreyi aşmasın.
+- "topic" kısa konu adı olsun (müfredattaki/ notlardaki adlandırmayla), "detail" o gün tam olarak ne yapılacağını söylesin."""

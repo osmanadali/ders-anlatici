@@ -234,28 +234,33 @@ class Grade(BaseModel):
     mistake_topic: str = Field(description="Hata varsa ilgili konu, yoksa boş")
 
 
-async def _parse(model_cls, content: list[dict] | str, system: list[dict] | str | None = None, effort: str | None = None):
+async def _parse(model_cls, content: list[dict] | str, system: list[dict] | str | None = None, effort: str | None = None,
+                 max_tokens: int = 16000):
     s = load_settings()
     kwargs = {}
     if system:
         kwargs["system"] = system
     try:
-        resp = await client().beta.messages.parse(
+        # Uzun çıktılar (ders notu, takvim) HTTP zaman aşımına takılmasın diye akış (stream) kullanılır.
+        async with client().beta.messages.stream(
             model=s["claude_model"],
-            max_tokens=16000,
+            max_tokens=max_tokens,
             messages=[{"role": "user", "content": content}],
             output_format=model_cls,
             output_config={"effort": effort or s["effort"]},
             betas=[FALLBACK_BETA],
             fallbacks="default",
             **kwargs,
-        )
+        ) as stream:
+            resp = await stream.get_final_message()
     except anthropic.AuthenticationError as e:
         raise TutorError("Claude API anahtarı geçersiz ya da tanımlı değil (.env → ANTHROPIC_API_KEY).") from e
     except anthropic.APIStatusError as e:
         raise TutorError(f"Claude API hatası ({e.status_code}): {e.message}") from e
     except anthropic.APIConnectionError as e:
         raise TutorError("Claude API'ye bağlanılamadı.") from e
+    if resp.stop_reason == "max_tokens":
+        raise TutorError("Cevap çok uzun olduğu için kesildi; kapsamı daraltıp tekrar dene.")
     if resp.stop_reason == "refusal" or resp.parsed_output is None:
         raise TutorError("Model geçerli bir cevap üretemedi, tekrar dene.")
     return resp.parsed_output
@@ -318,3 +323,70 @@ async def ocr_page(png: bytes) -> str:
     if resp.stop_reason == "refusal":
         return ""
     return "".join(b.text for b in resp.content if b.type == "text").strip()
+
+
+
+# ---------------------------------------------------------------- ders kaydı → not
+class NoteSection(BaseModel):
+    title: str
+    content: str
+
+
+class LectureNotes(BaseModel):
+    title: str
+    sections: list[NoteSection]
+
+
+async def lecture_notes(transcript: str, course: dict | None) -> LectureNotes:
+    ctx = ""
+    if course:
+        ctx = f"Ders: {course['name']}."
+        prof = prompts.course_profile_block(course)
+        if prof:
+            ctx += "\n" + prof[:4000]
+    return await _parse(LectureNotes, prompts.LECTURE_NOTES.format(context=ctx, transcript=transcript), effort="medium",
+                        max_tokens=32000)
+
+
+# ---------------------------------------------------------------- formül kâğıdı
+class FormulaItem(BaseModel):
+    name: str
+    tex: str = Field(description="LaTeX, dolar işaretsiz; formül değilse boş")
+    note: str = Field(description="Tek satırlık not ya da boş")
+
+
+class FormulaSection(BaseModel):
+    title: str
+    items: list[FormulaItem]
+
+
+class FormulaSheet(BaseModel):
+    title: str
+    sections: list[FormulaSection]
+
+
+async def formula_sheet(course: dict, notes_text: str, full: bool, focus: str = "") -> FormulaSheet:
+    text = prompts.FORMULA_SHEET.format(focus=f"Kapsam: {focus}" if focus else "")
+    return await _parse(FormulaSheet, text, _notes_system(course, notes_text, full), max_tokens=24000)
+
+
+# ---------------------------------------------------------------- tekrar takvimi
+class StudyTask(BaseModel):
+    kind: Literal["anlat", "tekrar", "sinav", "formul"]
+    topic: str
+    detail: str
+    minutes: int
+
+
+class StudyDay(BaseModel):
+    date: str = Field(description="YYYY-MM-DD")
+    tasks: list[StudyTask]
+
+
+class StudyPlan(BaseModel):
+    days: list[StudyDay]
+
+
+async def study_plan(course: dict, notes_text: str, full: bool, **kw) -> StudyPlan:
+    return await _parse(StudyPlan, prompts.STUDY_PLAN.format(**kw), _notes_system(course, notes_text, full),
+                        max_tokens=24000)

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formül Kâğıdı</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<style>
+  :root { --text: #1d2024; --muted: #6b7078; --line: #e3e0d8; --bg: #fbfaf7; --accent: #2f6f5e; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --text: #e8e6e1; --muted: #9aa0a6; --line: #30353a; --bg: #16191c; --accent: #5bb39a; } }
+  :root[data-theme="dark"] { --text: #e8e6e1; --muted: #9aa0a6; --line: #30353a; --bg: #16191c; --accent: #5bb39a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 Inter, system-ui, sans-serif; padding: 16px; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .bar input { flex: 1; min-width: 160px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; }
+  button { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; font: inherit; }
+  button.primary { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+  h1 { font-size: 20px; margin: 0 0 2px; } .sub { color: var(--muted); margin-bottom: 12px; }
+  .sheet { columns: 2 340px; column-gap: 22px; }
+  section { break-inside: avoid; margin-bottom: 14px; border-top: 2px solid var(--accent); padding-top: 4px; }
+  section h2 { font-size: 14px; margin: 0 0 6px; color: var(--accent); }
+  .item { break-inside: avoid; display: grid; grid-template-columns: minmax(90px, 30%) 1fr; gap: 6px; padding: 4px 0; border-bottom: 1px dotted var(--line); }
+  .item .n { font-weight: 600; } .item .f { overflow-x: auto; } .item .note { grid-column: 2; color: var(--muted); font-size: 12px; }
+  .muted { color: var(--muted); }
+  @media print {
+    :root { --text: #000; --muted: #444; --line: #bbb; --bg: #fff; --accent: #1f5446; }
+    body { padding: 0; font-size: 10.5px; } .bar { display: none; } .sheet { columns: 2; }
+    @page { margin: 10mm; }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <input id="focus" placeholder="İsteğe bağlı kapsam: ör. sadece vize konuları (1-7. hafta)">
+  <button id="make" class="primary">Hazırla / yenile</button>
+  <button id="print">Yazdır / PDF</button>
+</div>
+<div id="out"><p class="muted">Yükleniyor…</p></div>
+<script>
+  const cid = new URLSearchParams(location.search).get("c");
+  const esc = (t) => String(t || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const tex = (t) => { try { return katex.renderToString(t, { throwOnError: false, displayMode: false }); } catch { return esc(t); } };
+  const inline = (t) => esc(t).replace(/\$([^$]+)\$/g, (_, m) => tex(m));
+  function render(course, sh) {
+    const out = document.getElementById("out");
+    if (!sh) { out.innerHTML = `<h1>${esc(course)}</h1><p class="muted">Bu ders için henüz formül kâğıdı yok. “Hazırla”ya bas (notlar ve müfredattan çıkarılır, ~1 dakika).</p>`; return; }
+    document.title = "Formül Kâğıdı — " + course;
+    document.getElementById("focus").value = sh.focus || "";
+    out.innerHTML = `<h1>${esc(sh.title || course)}</h1><div class="sub">${esc(course)} · ${new Date(sh.created * 1000).toLocaleDateString("tr-TR")}</div><div class="sheet">` +
+      sh.sections.map((s) => `<section><h2>${esc(s.title)}</h2>` + s.items.map((i) =>
+        `<div class="item"><div class="n">${inline(i.name)}</div><div class="f">${i.tex ? tex(i.tex) : ""}</div>${i.note ? `<div class="note">${inline(i.note)}</div>` : ""}</div>`).join("") + `</section>`).join("") + `</div>`;
+  }
+  async function load() {
+    const r = await fetch(`/api/courses/${cid}/formula-sheet`);
+    if (!r.ok) { document.getElementById("out").textContent = "Ders bulunamadı."; return; }
+    const d = await r.json(); render(d.course, d.sheet);
+  }
+  document.getElementById("make").onclick = async (e) => {
+    e.target.disabled = true;
+    document.getElementById("out").innerHTML = '<p class="muted">Formül kâğıdı hazırlanıyor…</p>';
+    const r = await fetch(`/api/courses/${cid}/formula-sheet`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ focus: document.getElementById("focus").value.trim() }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) document.getElementById("out").innerHTML = `<p class="muted">Hata: ${esc(d.detail || r.statusText)}</p>`;
+    else render(d.course, d.sheet);
+    e.target.disabled = false;
+  };
+  document.getElementById("print").onclick = () => window.print();
+  load();
+</script>
+</body>
+</html>

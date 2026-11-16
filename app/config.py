@@ -29,7 +29,11 @@ DEFAULTS = {
     "claude_model": os.getenv("CLAUDE_MODEL", "claude-opus-5-5"),
     "effort": os.getenv("EFFORT", "medium"),
     "level": "normal",  # basit | normal | ileri
-    "tts_enabled": True,
+    "tts_enabled": True,  # eski ayar; tts_provider="browser" ile aynı anlamda
+    "tts_provider": os.getenv("TTS_PROVIDER", "elevenlabs"),  # elevenlabs | edge | xtts | browser
+    "edge_voice": "tr-TR-EmelNeural",
+    "stt_provider": os.getenv("STT_PROVIDER", "elevenlabs"),  # elevenlabs | whisper
+    "whisper_model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),  # small = hızlı, large-v3-turbo = isabetli
     "web_search": False,  # hoca gerektiğinde internette arama yapabilsin
 }
 
@@ -43,6 +47,9 @@ def load_settings() -> dict:
             s.update(json.loads(_SETTINGS_FILE.read_text("utf-8")))
         except (OSError, json.JSONDecodeError):
             pass
+    if s.get("tts_enabled") is False:
+        s["tts_provider"] = "browser"
+    s["tts_enabled"] = s["tts_provider"] != "browser"
     return s
 
 
@@ -51,5 +58,7 @@ def save_settings(patch: dict) -> dict:
     for k, v in patch.items():
         if k in DEFAULTS:
             s[k] = v
+    if "tts_provider" in patch:
+        s["tts_enabled"] = patch["tts_provider"] != "browser"
     _SETTINGS_FILE.write_text(json.dumps(s, ensure_ascii=False, indent=2), "utf-8")
     return s

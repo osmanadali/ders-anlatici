@@ -335,7 +335,8 @@
       img.className = "b-item b-page-img";
       img.alt = `Not sayfası ${op.page}`;
       img.src = `/api/courses/${this.courseId}/docs/${op.doc}/pages/${op.page}.png`;
-      await new Promise((res) => { img.onload = img.onerror = res; setTimeout(res, 4000); });
+      const ok = await new Promise((res) => { img.onload = () => res(true); img.onerror = () => res(false); setTimeout(() => res(false), 4000); });
+      if (!ok) return; // görseli olmayan belge (ör. ders kaydından çıkan not)
       this.append(img);
       await this._anim(img, [{ clipPath: "inset(0 0 100% 0)", opacity: 0.3 }, { clipPath: "inset(0 0 0 0)", opacity: 1 }], { duration: d });
     }
