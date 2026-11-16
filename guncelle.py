@@ -27,7 +27,7 @@ import zipfile
 from pathlib import Path
 
 REPO = "osmanadali/ders-anlatici"
-BRANCH = "main"
+BRANCH = os.getenv("DERS_DAL", "main")  # test için başka dal seçilebilir; kullanıcılar hep main
 ROOT = Path(__file__).resolve().parent
 KEEP = {"veri", ".env", ".venv", ".git", "__pycache__", ".pytest_cache"}  # asla üzerine yazılmaz/silinmez
 LAST = {"baslat.py", "guncelle.py"}  # en son ve yedeklenerek değiştirilir
