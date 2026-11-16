@@ -167,6 +167,13 @@
       <details id="konuBox" class="profile-box hidden"><summary>📗 Sınav odaklı konu anlatımı</summary><div class="konu-md"></div></details>
       <div id="denemeBox" class="profile-box hidden"><b>📝 Deneme sınavları (hocanın formatında)</b> <span id="denemeBtns"></span></div>
       <div id="quizArea"></div>
+      <details id="erpBox" class="profile-box erp-box"><summary>🏭 ERP alıştırması (MRP net ihtiyaç tablosu)</summary>
+        <div class="row">
+          <label class="small">Seviye <select id="erpSeviye"><option value="1">2 seviye</option><option value="2" selected>3 seviye</option></select></label>
+          <button id="erpYeni" class="primary small">🎲 Yeni senaryo</button>
+        </div>
+        <div id="erpAlan" class="muted small">Bir senaryo üret, net ihtiyaç tablosunu doldur; hesap aracı kontrol eder.</div>
+      </details>
       <h4>Zayıf konuların</h4>
       <ul id="weakList" class="weak-list"><li class="muted">Henüz kayıt yok.</li></ul>
     </div>
@@ -205,6 +212,9 @@
         <button class="primary small" type="submit">Ara</button>
       </form>
       <div id="libResults" class="lib-results"></div>
+      <h4 class="lib-h">🗺 Bilgi haritası</h4>
+      <div class="muted small">Endüstri mühendisliği konu ağacı. Çubuk, kütüphanende o konuyla ilgili bulunan parça sayısını gösterir; kırmızı çerçeveli konular zayıf (literatür taraması bunlara öncelik verir).</div>
+      <div id="haritaBox" class="harita"></div>
       <h4 class="lib-h">Literatür taraması</h4>
       <div id="litBox" class="profile-box lib-lit">
         <div id="litInfo" class="muted small"></div>
@@ -326,6 +336,7 @@
     <label>Öğretme tarzı
       <select id="setTarz"><option value="anlat">Anlat (önce anlatır)</option><option value="sokratik">Sokratik (önce bana sor, cevaba kendim ulaşayım)</option></select>
     </label>
+    <label class="check"><input id="setHesap" type="checkbox"> 🧮 Sayısal mühendislik sorularında gerçek hesap araçlarını kullan (EOQ, MRP, doğrusal programlama, kuyruk…)</label>
     <label class="check"><input id="setKendiCalisma" type="checkbox"> Bilgisayar boşken hoca kaynaklardan kendi kendine soru hazırlayıp doğrulasın</label>
     <div class="row"><button type="button" id="profilSifirla" class="ghost small">Öğrenci profilimi sıfırla</button> <span class="muted small">Hocanın senin tercihlerinden öğrendikleri silinir.</span></div>
     <label class="check"><input id="setOtoPaket" type="checkbox"> Yeni not eklenince özet, konu anlatımı ve deneme sınavlarını kendiliğinden güncelle</label>

@@ -351,3 +351,28 @@ body.drop::after { content: "📥 Bırak: hangi derse ait olduğunu kendisi bulu
 .board-wrap:fullscreen, .board-wrap.tam-ekran { background: var(--bg); display: flex; flex-direction: column; padding: 10px; gap: 8px; }
 .board-wrap.tam-ekran { position: fixed; inset: 0; z-index: 1000; }
 .board-wrap:fullscreen .classroom, .board-wrap.tam-ekran .classroom { flex: 1; min-height: 0; height: auto; }
+
+/* ---------------- bilgi haritası, ERP alıştırması, hesap rozeti */
+.harita { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; min-width: 0; }
+.harita details { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 6px 10px; min-width: 0; }
+.harita summary { cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-weight: 600; font-size: 13.5px; }
+.harita .h-ad { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.h-bar { flex: 0 0 90px; height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.h-bar i { display: block; height: 100%; background: var(--accent); }
+.h-grup { font-size: 11px; color: var(--muted); font-weight: 500; }
+.h-konu { margin: 6px 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); font-size: 12.5px; overflow-wrap: anywhere; }
+.h-konu.zayif { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.h-konu .h-ust { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.h-konu b { font-weight: 600; }
+.h-konu .h-alt { color: var(--muted); margin-top: 2px; }
+.erp-box .row { align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.erp-tablo { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.erp-tablo th, .erp-tablo td { border: 1px solid var(--line); padding: 3px 4px; text-align: center; }
+.erp-tablo th:first-child, .erp-tablo td:first-child { text-align: left; white-space: nowrap; }
+.erp-kaydir { overflow-x: auto; max-width: 100%; margin: 6px 0; }
+.erp-tablo input { width: 52px; min-width: 0; padding: 3px 2px; text-align: center; color: var(--text); }
+.erp-tablo td.dogru { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.erp-tablo td.yanlis { background: color-mix(in srgb, var(--danger) 22%, transparent); }
+.erp-not { overflow-wrap: anywhere; margin: 4px 0; }
+.hesap-rozet { align-self: flex-start; background: var(--accent-2); color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+#tab-quiz { min-width: 0; }

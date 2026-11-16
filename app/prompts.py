@@ -339,3 +339,24 @@ Bölüm yapısını, soru sayılarını ve şık sırasını koru.
 <ders_notlari>
 {notlar}
 </ders_notlari>"""
+
+
+# ---------------------------------------------------------------- mühendis hesap araçları
+HESAP_SEC = """Aşağıdaki öğrenci sorusu sayısal bir endüstri mühendisliği problemi içeriyorsa, ona uyan HESAP ARACINI seç ve araç girdilerini sorudaki sayılardan doldur. Sorudaki sayıları aynen kullan, hiçbir sayı uydurma. Soru bir hesap aracına uymuyorsa ya da gerekli sayılar eksikse arac alanına "yok" yaz.
+
+Araçlar:
+{araclar}
+
+Cevabı şu JSON nesnesi olarak ver: arac = araç adı ya da "yok"; girdiler_json = aracın alanlarını içeren JSON nesnesinin METNİ (ör. {{"talep_yillik": 1000, "siparis_maliyeti": 50, "elde_tutma": 2}}).
+
+Öğrenci sorusu:
+{soru}"""
+
+
+def hesap_blogu(metin: str) -> str:
+    return (
+        "<hesap_sonucu>\n" + metin + "\n</hesap_sonucu>\n"
+        "Bu sonuç gerçek bir hesap aracından geldi. Sayıları BU hesaptan al, kendin hesaplama ya da sayı uydurma. "
+        "Adımları tahtada göster (formül, yerine koyma, sonuç), ardından sonucu mühendis gözüyle yorumla: ne anlama geliyor, "
+        "sahada ne yapılır, hangi varsayımlar geçerli."
+    )

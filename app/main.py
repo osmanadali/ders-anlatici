@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth, calisma, curriculum, hazir, klasor, kutuphane, llm, notes, ogrenme, paket, prompts, siniflandir, store, voice, yerel
+from . import auth, bilgi_haritasi, calisma, curriculum, erp_alistirma, hazir, hazir_bilgi, hesap, klasor, kutuphane, llm, notes, ogrenme, paket, prompts, siniflandir, store, voice, yerel
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -173,6 +173,11 @@ async def _warm_up():
     if os.getenv("DERS_ON_YUKLEME", "1") != "0" and load_settings().get("llm_provider") != "gemini":
         yerel.baslat_arka_planda()
     # Kütüphane: kuyruktaki kitapları işler, gömmeleri tamamlar; literatür taraması haftada bir
+    if os.getenv("DERS_ON_YUKLEME", "1") != "0":
+        try:
+            await asyncio.to_thread(hazir_bilgi.yukle)  # ERP/MRP rehberleri (bir kez)
+        except Exception:
+            log.exception("hazır bilgi rehberleri eklenemedi")
     try:
         kutuphane.baslat_isleyici()
     except Exception:
@@ -463,6 +468,31 @@ def _literatur_durum() -> dict:
 async def kutuphane_liste():
     kaynaklar = await asyncio.to_thread(kutuphane.liste)
     return {"kaynaklar": kaynaklar, "durum": await asyncio.to_thread(kutuphane.durum), "literatur": _literatur_durum()}
+
+
+@app.get("/api/bilgi-haritasi")
+async def bilgi_haritasi_ver():
+    """Endüstri mühendisliği konu ağacı + kütüphane kapsamı (zayıf düğümler işaretli)."""
+    return await asyncio.to_thread(bilgi_haritasi.agac)
+
+
+@app.get("/api/erp-alistirma")
+async def erp_alistirma_yeni(seed: int | None = None, seviye: int = 2):
+    """Rastgele MRP alıştırması (çözüm sunucuda kalır)."""
+    return erp_alistirma.yeni(seed, seviye)
+
+
+class ErpKontrol(BaseModel):
+    id: str
+    cevap: dict[str, list[float | None]] = {}
+
+
+@app.post("/api/erp-alistirma/kontrol")
+async def erp_alistirma_kontrol(body: ErpKontrol):
+    try:
+        return erp_alistirma.kontrol(body.id, body.cevap)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.post("/api/kutuphane")
@@ -951,6 +981,7 @@ async def ask(
     messages = session["messages"] + [user_msg]
     sid = session["id"]
     deep = _wants_deep(settings, mode, style, user_text, attach_names, bool(focus))
+    hesapla = _wants_hesap(settings, mode, soru_metni)
     session["timeline"].append(
         {"type": "user", "text": text.strip() or user_text[:200], "attachments": attach_names, "mode": mode}
     )
@@ -969,7 +1000,13 @@ async def ask(
         send = messages
         try:
             brain = llm.brain_label()
-            if deep:
+            if hesapla:
+                hs = await _hesap_adimi(soru_metni)
+                if hs:
+                    yield _sse({"type": "hesap", "arac": hs.arac, "baslik": hs.baslik, "message": f"🧮 Hesaplandı: {hs.baslik}"})
+                    send = messages[:-1] + [{"role": "user", "content": content + [
+                        {"type": "text", "text": prompts.hesap_blogu(hesap.sonuc_metni(hs))}]}]
+            if deep and send is messages:
                 # Önce gerekçeli tam çözüm (öğrenciye gösterilmez), sonra hoca bunu izleyerek anlatır.
                 yield _sse({"type": "status", "message": "Soruyu önce kendi kendime çözüyorum…"})
                 try:
@@ -1130,6 +1167,40 @@ async def _with_timeouts(agen, brain: str):
         if "say" in item:
             first = False
         yield item
+
+
+HESAP_ANAHTAR = (
+    "optimum", "maliyet", "eoq", "kontrol karti", "cpk", "cp ", "mrp", "kuyruk", "atama", "ulastirma", "cpm", "pert",
+    "kritik yol", "simpleks", "dogrusal programlama", "tamsayili", "stok", "siparis", "emniyet", "nbd", "igo",
+    "net bugunku", "ic getiri", "basabas", "ogrenme egrisi", "johnson", "cizelge", "guven araligi", "t testi",
+    "t-testi", "erlang", "m/m", "yeterlilik", "ucl", "lcl", "brut ihtiyac", "net ihtiyac", "urun agaci", "simulasyon",
+    "benzetim", "spt", "edd", "gecikme", "ortalama", "standart sapma",
+)
+HESAP_TIMEOUT = 90
+
+
+def _wants_hesap(settings: dict, mode: str, text: str) -> bool:
+    """Sayı içeren ve bir mühendislik hesabına benzeyen sohbet sorularında hesap aracı denenir."""
+    if not settings.get("hesap_araclari", True) or mode != "chat":
+        return False
+    t = kutuphane.katla(text or "")
+    if len(t) < 20 or not any(ch.isdigit() for ch in t):
+        return False
+    return any(k in t for k in HESAP_ANAHTAR)
+
+
+async def _hesap_adimi(soru: str):
+    """Modele araç seçtirir, hesabı çalıştırır. Hata/eksik girdi/uygun araç yoksa sessizce None."""
+    try:
+        sec = await asyncio.wait_for(llm.hesap_secimi(soru), HESAP_TIMEOUT)
+        if not sec:
+            return None
+        return hesap.calistir(sec["arac"], sec["girdiler"])
+    except (llm.TutorError, asyncio.TimeoutError, hesap.HesapHatasi) as e:
+        log.info("hesap aracı atlandı: %s", e or "süre aşımı")
+    except Exception:
+        log.exception("hesap aracı beklenmedik hata verdi")
+    return None
 
 
 def _wants_deep(settings: dict, mode: str, style: str, text: str, attachments: list, page: bool) -> bool:
