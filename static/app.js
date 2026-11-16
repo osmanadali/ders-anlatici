@@ -445,15 +445,19 @@
       $("#planStatus").textContent = (S.plan.hazir ? "📦 Hazır ders planı (notların tamamından): " : "") + S.plan.title + " — başlamak için bir bölüme tıkla.";
       renderPlan();
     }
+    renderRehber();
+    renderDenemeler();
+    renderPaket(true);
+    renderDocs();
+    loadWeak();
+    if ($("#tab-plan").classList.contains("active")) loadPlanTab();
+  }
+  function renderRehber() {
     const rb = $("#rehberBox");
     if (S.course?.sinav_rehberi) {
       rb.classList.remove("hidden");
       rb.querySelector("div").innerHTML = BoardUtil.renderInline(S.course.sinav_rehberi).replace(/\n/g, "<br>");
     } else rb.classList.add("hidden");
-    renderDenemeler();
-    renderDocs();
-    loadWeak();
-    if ($("#tab-plan").classList.contains("active")) loadPlanTab();
   }
   $("#courseSelect").onchange = (e) => { S.sessionId = ""; selectCourse(e.target.value); };
   $("#newCourseBtn").onclick = async () => {
@@ -600,35 +604,53 @@
     $("#denemeBtns").innerHTML = ex.map((x, i) => `<button class="ghost small" data-i="${i}">${(x.baslik || "Deneme " + (i + 1)).replace(/</g, "&lt;")}</button>`).join(" ");
     $("#denemeBtns").querySelectorAll("button").forEach((b) => (b.onclick = () => openDeneme(ex[+b.dataset.i])));
   }
-  function openDeneme(x) {
+  // Eski paket biçimini (bolum1_dy … bolum5_bonus) genel şemaya çevirir: {baslik, aciklama, bolumler:[{baslik, tur, yonerge, metin, sorular}]}
+  function denemeGenel(x) {
+    if (Array.isArray(x.bolumler)) return x;
+    const b = [], m = x.bolum3_metin || {};
+    if (x.bolum1_dy?.length) b.push({ baslik: "Doğru / Yanlış", tur: "dy", sorular: x.bolum1_dy.map((q) => ({ soru: q.ifade, cevap: q.cevap, aciklama: q.aciklama, kaynak: q.kaynak })) });
+    if (x.bolum2_coktan?.length) b.push({ baslik: "Çoktan seçmeli", tur: "coktan", sorular: x.bolum2_coktan });
+    if (m.metin || m.sorular?.length) b.push({ baslik: "Metin soruları", tur: "metin", metin: m.metin, sorular: (m.sorular || []).map((q) => ({ ...q, kaynak: q.kaynak || m.kaynak })) });
+    if (x.bolum4_klasik?.length) b.push({ baslik: "Klasik", tur: "klasik", sorular: x.bolum4_klasik });
+    if (x.bolum5_bonus?.length) b.push({ baslik: "Bonus", tur: "bonus", sorular: x.bolum5_bonus.map((q) => ({ soru: q.soru, ornek_cevap: q.cozum })) });
+    return { baslik: x.baslik, aciklama: x.aciklama || "", bolumler: b };
+  }
+  const dyCevap = (c) => { const s = String(c || "").trim().toUpperCase().charAt(0); return s === "T" ? "D" : s === "F" ? "Y" : s; };
+  const sikCevap = (c) => String(c || "").trim().replace(/^\(/, "").charAt(0).toUpperCase();
+  function openDeneme(raw) {
+    const x = denemeGenel(raw);
     const esc = (t) => BoardUtil.renderInline(t || "");
     const src = (t) => (t ? `<span class="muted small"> (${String(t).replace(/</g, "&lt;")})</span>` : "");
-    const open = [];  // açık uçlu sorular (değerlendirme için)
+    const open = [], keys = [];  // açık uçlu sorular (değerlendirme için) ve D/Y + test cevap anahtarı
     const openQ = (soru, ornek, puan, kaynak, label) => {
-      const k = open.push({ question: soru, kind: "acik_uclu", choices: [], answer: ornek + (puan ? "\nPuanlama: " + puan : ""), topic: label, page: kaynak || "" }) - 1;
+      const k = open.push({ question: soru, kind: "acik_uclu", choices: [], answer: (ornek || "") + (puan ? "\nPuanlama: " + puan : ""), topic: label, page: kaynak || "" }) - 1;
       return `<div class="dq"><div class="q">${esc(soru)}</div><textarea rows="5" data-open="${k}" placeholder="Cevabını yaz…"></textarea>
         <div class="row"><button class="ghost small" data-grade="${k}">Hocaya değerlendirt</button></div><div class="fb hidden" data-fb="${k}"></div>
         <details class="key hidden"><summary>Örnek cevap</summary><p>${esc(ornek).replace(/\n/g, "<br>")}</p>${puan ? `<p class="muted small"><b>Puanlama:</b> ${esc(puan)}</p>` : ""}${src(kaynak)}</details></div>`;
     };
+    const AD = { dy: "Doğru / Yanlış", coktan: "Çoktan seçmeli", metin: "Metin soruları", klasik: "Klasik", bonus: "Bonus", kisa: "Kısa cevap" };
+    const bolum = (b, bi) => {
+      const qs = b.sorular || [];
+      let body = "";
+      if (b.tur === "dy") body = qs.map((q, i) => { const k = keys.push(dyCevap(q.cevap)) - 1;
+        return `<div class="dq dy" data-key="${k}"><div class="q">${i + 1}. ${esc(q.soru)}</div>
+        <div class="row"><label class="check"><input type="radio" name="dy${bi}_${i}" value="D"> D</label><label class="check"><input type="radio" name="dy${bi}_${i}" value="Y"> Y</label></div>
+        <div class="key hidden">Cevap: <b>${dyCevap(q.cevap)}</b> — ${esc(q.aciklama)}${src(q.kaynak)}</div></div>`; }).join("");
+      else if (b.tur === "coktan") body = qs.map((q, i) => { const k = keys.push(sikCevap(q.cevap)) - 1;
+        return `<div class="dq mc" data-key="${k}"><div class="q">${i + 1}. ${esc(q.soru)}</div>
+        ${(q.siklar || []).map((c, j) => `<label class="check opt"><input type="radio" name="mc${bi}_${i}" value="${"ABCDE"[j]}"> <b>${"ABCDE"[j]})</b> ${esc(String(c).replace(/^\(?[A-Ea-e][).]\s*/, ""))}</label>`).join("")}
+        <div class="key hidden">Cevap: <b>${sikCevap(q.cevap)}</b> — ${esc(q.aciklama)}${src(q.kaynak)}</div></div>`; }).join("");
+      else {  // metin, klasik, bonus, kisa: yazılı cevap + hocaya değerlendirt + örnek cevap
+        if (b.tur === "metin" && b.metin) body += `<blockquote class="metin">${esc(b.metin).replace(/\n/g, "<br>")}</blockquote>`;
+        body += qs.map((q, i) => openQ(`${i + 1}. ${q.soru}`, q.ornek_cevap || q.cevap || q.cozum, q.puanlama, q.kaynak || b.kaynak, b.baslik || AD[b.tur] || "Soru")).join("");
+      }
+      return `<h4>${bi + 1}. Bölüm — ${esc(b.baslik || AD[b.tur] || "")}</h4>${b.yonerge ? `<p class="muted small yonerge">${esc(b.yonerge)}</p>` : ""}${body}`;
+    };
     const area = $("#quizArea");
     area.innerHTML = `<div class="deneme">
       <div class="row"><h3 style="margin:0">${esc(x.baslik)}</h3><div class="spacer"></div><button class="ghost small" data-k="close">✕ Kapat</button></div>
-      <p class="muted small">Süre sınırı yok. Cevaplarını işaretle/yaz, sonra en alttan “Kontrol et”.</p>
-      <h4>1. Bölüm — Doğru / Yanlış</h4>
-      ${(x.bolum1_dy || []).map((q, i) => `<div class="dq dy" data-i="${i}"><div class="q">${i + 1}. ${esc(q.ifade)}</div>
-        <label class="check"><input type="radio" name="dy${i}" value="D"> D</label> <label class="check"><input type="radio" name="dy${i}" value="Y"> Y</label>
-        <div class="key hidden">Cevap: <b>${q.cevap}</b> — ${esc(q.aciklama)}${src(q.kaynak)}</div></div>`).join("")}
-      <h4>2. Bölüm — Çoktan seçmeli</h4>
-      ${(x.bolum2_coktan || []).map((q, i) => `<div class="dq mc" data-i="${i}"><div class="q">${i + 1}. ${esc(q.soru)}</div>
-        ${(q.siklar || []).map((c, k) => `<label class="check opt"><input type="radio" name="mc${i}" value="${"ABCDE"[k]}"> <b>${"ABCDE"[k]})</b> ${esc(String(c).replace(/^[A-E][).]\s*/, ""))}</label>`).join("")}
-        <div class="key hidden">Cevap: <b>${String(q.cevap).trim().charAt(0)}</b> — ${esc(q.aciklama)}${src(q.kaynak)}</div></div>`).join("")}
-      <h4>3. Bölüm — Metin soruları</h4>
-      <blockquote class="metin">${esc(x.bolum3_metin?.metin).replace(/\n/g, "<br>")}</blockquote>
-      ${(x.bolum3_metin?.sorular || []).map((q, i) => openQ(`${i + 1}. ${q.soru}`, q.ornek_cevap, "", x.bolum3_metin?.kaynak, "Metin sorusu")).join("")}
-      <h4>4. Bölüm — Klasik</h4>
-      ${(x.bolum4_klasik || []).map((q) => openQ(q.soru, q.ornek_cevap, q.puanlama, q.kaynak, "Klasik soru")).join("")}
-      <h4>5. Bölüm — Bonus</h4>
-      ${(x.bolum5_bonus || []).map((q) => openQ(q.soru, q.cozum, "", "", "Bonus soru")).join("")}
+      <p class="muted small">${x.aciklama ? esc(x.aciklama) + " " : ""}Süre sınırı yok. Cevaplarını işaretle/yaz, sonra en alttan “Kontrol et”.</p>
+      ${(x.bolumler || []).map(bolum).join("")}
       <div class="row"><button class="primary" data-k="check">Kontrol et</button><span class="dscore"></span></div>
     </div>`;
     area.querySelector('[data-k="close"]').onclick = () => { area.innerHTML = ""; };
@@ -643,17 +665,90 @@
     }));
     area.querySelector('[data-k="check"]').onclick = () => {
       let ok = 0, n = 0;
-      const mark = (el, picked, right) => {
-        n++; const good = picked === right; if (good) ok++;
+      area.querySelectorAll(".dy, .mc").forEach((el) => {
+        n++; const good = el.querySelector("input:checked")?.value === keys[+el.dataset.key]; if (good) ok++;
         el.classList.toggle("ok", good); el.classList.toggle("bad", !good);
-      };
-      area.querySelectorAll(".dy").forEach((el) => mark(el, el.querySelector("input:checked")?.value, x.bolum1_dy[+el.dataset.i].cevap));
-      area.querySelectorAll(".mc").forEach((el) => mark(el, el.querySelector("input:checked")?.value, String(x.bolum2_coktan[+el.dataset.i].cevap).trim().charAt(0).toUpperCase()));
+      });
       area.querySelectorAll(".key").forEach((el) => el.classList.remove("hidden"));
-      area.querySelector(".dscore").textContent = ` D/Y + test: ${ok}/${n} doğru. Açık uçlu cevapları örnek cevapla karşılaştır ya da “Hocaya değerlendirt”.`;
+      area.querySelector(".dscore").textContent = (n ? ` D/Y + test: ${ok}/${n} doğru.` : "") + " Açık uçlu cevapları örnek cevapla karşılaştır ya da “Hocaya değerlendirt”.";
     };
     area.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  // ================================================================ uygulamanın kendi ürettiği ders paketi
+  let paketTimer = null;
+  function renderPaket(dersDegisti = false) {
+    const box = $("#paketBox"), ta = $("#sinavFormati"), ds = $("#denemeSayisi");
+    box.classList.toggle("hidden", !S.course);
+    clearTimeout(paketTimer);
+    if (!S.course) return;
+    // kullanıcının yazıp henüz kaydetmediği formatı ezme (ders değiştiyse yeni dersinki gelir)
+    if (dersDegisti || (document.activeElement !== ta && !ta.dataset.dirty)) { ta.value = S.course.sinav_formati || ""; delete ta.dataset.dirty; }
+    if (S.course.paket_is?.deneme_sayisi && (dersDegisti || document.activeElement !== ds)) ds.value = S.course.paket_is.deneme_sayisi;
+    showPaket(S.course.paket_is);
+  }
+  $("#sinavFormati").addEventListener("input", (e) => { e.target.dataset.dirty = "1"; });
+  async function paketSonrasiYenile(id) {
+    // Yalnızca paketin ürettiklerini yenile: süren anlatıma (S.lectureActive, S.plan, S.lectureIdx) dokunma.
+    const c = await api(`/api/courses/${id}`);
+    if (id !== S.courseId) return;
+    S.course = c;
+    renderRehber(); renderDenemeler(); renderPaket(); renderDocs();
+    if (c.lecture_plan && JSON.stringify(c.lecture_plan) !== JSON.stringify(S.plan)) {
+      if (S.lectureActive || S.streamOpen) toast("📦 Yeni ders planı hazır; şu anki ders bozulmasın diye dersi listeden yeniden seçince görünecek.", 7000);
+      else {
+        S.plan = c.lecture_plan; S.lectureIdx = -1;
+        $("#planStatus").textContent = S.plan.title + " — başlamak için bir bölüme tıkla.";
+        renderPlan();
+      }
+    }
+  }
+  function showPaket(st) {
+    const d = $("#paketDurum"), bar = $("#paketBar"), on = st?.durum === "calisiyor";
+    clearTimeout(paketTimer);
+    $("#paketBtn").disabled = on;
+    bar.classList.toggle("hidden", !on);
+    bar.value = st?.ilerleme || 0;
+    if (!st || !st.durum || st.durum === "yok") { d.textContent = "Notlarından özet, konu anlatımı ve hocanın formatında deneme sınavları üretir (bu bilgisayardaki yapay zekayla)."; return; }
+    const ic = { calisiyor: "⏳", bitti: "✔", hata: "⚠", yarida: "⏸" }[st.durum] || "";
+    d.textContent = st.durum === "hata" ? `${ic} ${st.adim ? st.adim + ": " : ""}${st.hata || "hata"}`
+      : st.durum === "yarida" ? `${ic} Yarıda kaldı (${st.adim || ""}). Düğmeye basınca kaldığı yerden devam eder.`
+      : `${ic} ${st.adim || ""}` + (on && st.ilerleme ? ` — %${Math.round(st.ilerleme * 100)}` : "");
+    if (st.yeniden && st.durum !== "bitti") d.textContent += " (baştan üretim)";
+    if (on) paketTimer = setTimeout(pollPaket, 3000);
+  }
+  async function pollPaket() {
+    const id = S.courseId;
+    if (!id) return;
+    let st;
+    try { st = await api(`/api/courses/${id}/paket`); } catch { paketTimer = setTimeout(pollPaket, 3000); return; }
+    if (id !== S.courseId) return;
+    if (st.durum === "calisiyor") return showPaket(st);
+    try { await paketSonrasiYenile(id); } catch (e) { toast(e.message); }  // yeni özetler, konu anlatımı ve denemeler
+    if (st.durum === "bitti") toast("📦 " + (st.adim || "Ders paketi hazır."));
+    else if (st.durum === "hata") toast("Ders paketi tamamlanamadı: " + (st.hata || ""), 9000);
+  }
+  async function saveFormat() {
+    const ta = $("#sinavFormati"), metin = ta.value.trim();
+    if (metin === (S.course?.sinav_formati || "")) { delete ta.dataset.dirty; return; }
+    const r = await postJSON(`/api/courses/${S.courseId}/sinav-formati`, { metin });
+    S.course.sinav_formati = r.metin;
+    delete ta.dataset.dirty;
+  }
+  $("#formatKaydet").onclick = async () => {
+    if (!S.courseId) return toast("Önce bir ders seç.");
+    try { await saveFormat(); toast("Sınav formatı kaydedildi; deneme sınavları bu formata göre üretilecek."); } catch (e) { toast(e.message); }
+  };
+  $("#paketBtn").onclick = async () => {
+    if (!S.courseId) return toast("Önce bir ders seç.");
+    try {
+      await saveFormat();
+      const n = Math.max(1, Math.min(5, +$("#denemeSayisi").value || 2));
+      const st = await postJSON(`/api/courses/${S.courseId}/paket`, { deneme_sayisi: n, yeniden: $("#paketYeniden").checked });
+      $("#paketYeniden").checked = false;
+      showPaket(st);
+    } catch (e) { toast(e.message); }
+  };
 
   // ================================================================ yerel yapay zeka durumu
   let yerelTimer = null;
@@ -1052,6 +1147,7 @@
       $("#sampleStatus").textContent = o.sample ? "✔ Ses örneği kayıtlı" : "Henüz ses örneği yok";
     }).catch(() => {});
     $("#setWeb").checked = !!st.web_search;
+    $("#setOtoPaket").checked = st.otomatik_paket !== false;
     $("#set3d").checked = localGet("hoca3d") !== "0";
     $("#setConvStt").value = localGet("convStt") === "whisper" || !window.BrowserConversation?.available() ? "whisper" : "browser";
     ["keyGemini", "keyEleven"].forEach((id) => ($("#" + id).value = ""));
@@ -1146,6 +1242,7 @@
       edge_voice: $("#setEdgeVoice").value || S.settings.edge_voice,
       stt_provider: $("#setStt").value,
       web_search: $("#setWeb").checked,
+      otomatik_paket: $("#setOtoPaket").checked,
     });
     localSet("sens", $("#setSens").value);
     localSet("hoca3d", $("#set3d").checked ? "1" : "0");

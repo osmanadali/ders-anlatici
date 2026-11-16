@@ -142,6 +142,19 @@
         <label class="grow">Konu (boş = tüm notlar) <input id="qTopic" type="text" placeholder="ör. türev uygulamaları"></label>
         <button id="quizBtn" class="primary">Sınav hazırla</button>
       </div>
+      <div id="paketBox" class="profile-box paket-box hidden">
+        <label class="grow">Sınav formatı (hocanın söylediği)
+          <textarea id="sinavFormati" rows="3" placeholder="ör. 10 doğru/yanlış, 10 test (5 şık), 1 metin sorusu, 2 klasik soru, 1 bonus. Boş bırakırsan genel vize/final formatı kullanılır."></textarea>
+        </label>
+        <div class="row">
+          <button id="formatKaydet" class="ghost small">Formatı kaydet</button>
+          <label class="small">Deneme sayısı <input id="denemeSayisi" type="number" min="1" max="5" value="2"></label>
+          <label class="check small"><input id="paketYeniden" type="checkbox"> Baştan üret</label>
+        </div>
+        <button id="paketBtn" class="primary">📦 Konu anlatımı, özet ve deneme sınavları üret</button>
+        <div id="paketDurum" class="muted small"></div>
+        <progress id="paketBar" class="hidden" max="1" value="0"></progress>
+      </div>
       <details id="rehberBox" class="profile-box hidden"><summary>📘 Sınav rehberi (notlardan)</summary><div></div></details>
       <details id="ozetBox" class="profile-box hidden"><summary>⚡ Kısa sınav özeti</summary><div class="konu-md"></div></details>
       <details id="konuBox" class="profile-box hidden"><summary>📗 Sınav odaklı konu anlatımı</summary><div class="konu-md"></div></details>
@@ -263,6 +276,7 @@
       <span id="glbStatus" class="muted small"></span>
     </div>
     <label class="check"><input id="setWeb" type="checkbox"> Gerekirse internette araştırabilsin (daha yavaş)</label>
+    <label class="check"><input id="setOtoPaket" type="checkbox"> Yeni not eklenince özet, konu anlatımı ve deneme sınavlarını kendiliğinden güncelle</label>
     <label>Konuşmalı derste konuşma tanıma
       <select id="setConvStt">
         <option value="browser">Tarayıcı: anında, ücretsiz (önerilen)</option>

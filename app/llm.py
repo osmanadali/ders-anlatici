@@ -54,6 +54,12 @@ def notes_limit() -> int:
 
     if provider() == "gemini":
         return FULL_NOTES_CHAR_LIMIT
+    return yerel_notes_limit()
+
+
+def yerel_notes_limit() -> int:
+    """Yerel modelin bağlamına sığan not bütçesi (karakter). Hangi beyin cevap verirse versin istek sığsın diye
+    uzun arka plan işleri (paket üretimi) bunu üst sınır olarak kullanır."""
     return max(8000, int(yerel.baglam() * llm_yerel.CHARS_PER_TOKEN * 0.45))
 
 

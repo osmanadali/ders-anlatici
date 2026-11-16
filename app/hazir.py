@@ -57,6 +57,11 @@ def apply_to_document(course_id: str, doc: dict, filename: str) -> bool:
     if not hit:
         return False
     pack, info = hit
+    with notes.course_lock(course_id):  # oku-değiştir-yaz: o arada başka bir yükleme/iş kaydederse ezilmesin
+        return _apply(course_id, doc, pack, info)
+
+
+def _apply(course_id: str, doc: dict, pack: dict, info: dict) -> bool:
     course = notes.get_course(course_id)
     d = notes.find_doc(course, doc["id"]) if course else None
     if not d:

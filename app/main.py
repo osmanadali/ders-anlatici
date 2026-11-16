@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, curriculum, hazir, llm, notes, prompts, store, voice, yerel
+from . import auth, curriculum, hazir, llm, notes, paket, prompts, store, voice, yerel
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -145,6 +145,10 @@ async def post_settings(patch: dict):
 @app.on_event("startup")
 async def _warm_up():
     """Ücretsiz konuşma tanıma (Whisper) modelini açılışta arka planda hazırla (ilk seferde ~1.6 GB iner)."""
+    try:
+        paket.acilista_duzelt()  # kapanırken yarıda kalan paket üretimleri "yarida" görünsün
+    except Exception:
+        log.exception("paket durumları düzeltilemedi")
     if load_settings().get("stt_provider") == "whisper" and os.getenv("DERS_ON_YUKLEME", "1") != "0":
         # arka plan iş parçacığı (daemon): indirme sürerken uygulama kapatılırsa kapanmayı engellemez
         import threading
@@ -323,6 +327,7 @@ async def upload_doc(course_id: str, file: UploadFile = File(...)):
     except Exception:
         log.exception("hazır paket uygulanamadı: %s", file.filename)
     _schedule_ocr(course_id, doc)
+    paket.yeni_belge(course_id)  # ayar açıksa biraz bekleyip ders paketini artımlı günceller
     return doc
 
 
@@ -361,6 +366,7 @@ async def _process_recording(course_id: str, doc_id: str, content_type: str) -> 
                  for i, sec in enumerate(organized.sections)]
         notes.update_doc(course_id, doc_id, pages=pages, status="",
                          **({"name": organized.title} if organized.title else {}))
+        paket.yeni_belge(course_id)
     except (voice.VoiceError, llm.TutorError) as e:
         notes.update_doc(course_id, doc_id, status=f"Hata: {e}")
     except Exception as e:  # beklenmeyen hata da kullanıcıya görünsün
@@ -401,6 +407,40 @@ async def make_formula_sheet(course_id: str, body: FocusBody):
     data = sheet.model_dump() | {"created": time.time(), "focus": body.focus}
     notes.set_course_field(course_id, "formula_sheet", data)
     return {"course": course["name"], "sheet": data}
+
+
+# ---------------------------------------------------------------- uygulamanın kendi ürettiği ders paketi
+class PaketBody(BaseModel):
+    deneme_sayisi: int = 2
+    yeniden: bool = False
+
+
+@app.post("/api/courses/{course_id}/paket")
+async def paket_baslat(course_id: str, body: PaketBody | None = None):
+    body = body or PaketBody()
+    try:
+        return paket.baslat(course_id, body.deneme_sayisi, body.yeniden)
+    except KeyError:
+        raise HTTPException(404, "Ders bulunamadı")
+
+
+@app.get("/api/courses/{course_id}/paket")
+async def paket_durum(course_id: str):
+    if not notes.get_course(course_id):
+        raise HTTPException(404, "Ders bulunamadı")
+    return paket.durum(course_id)
+
+
+class FormatBody(BaseModel):
+    metin: str = ""
+
+
+@app.post("/api/courses/{course_id}/sinav-formati")
+async def sinav_formati(course_id: str, body: FormatBody):
+    c = notes.set_course_field(course_id, "sinav_formati", body.metin.strip()[:4000])
+    if not c:
+        raise HTTPException(404, "Ders bulunamadı")
+    return {"ok": True, "metin": c["sinav_formati"]}
 
 
 # ---------------------------------------------------------------- sınav takvimi
@@ -518,6 +558,7 @@ def _schedule_ocr(course_id: str, doc: dict) -> None:
     t = asyncio.create_task(run())
     _ocr_tasks.add(t)
     t.add_done_callback(_ocr_tasks.discard)
+    paket.arka_ocr_ekle(course_id, t)  # paket işi aynı sayfaları ikinci kez okumasın, bunun bitmesini beklesin
 
 
 # ================================================================ ses

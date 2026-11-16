@@ -23,6 +23,16 @@ Ders notlarını öğrenen, soruları sesli (istersen **senin sesinle**, ücrets
 
 Ayrıca: hoca karakteri (sese göre ağız hareketi, yazma/dinleme/düşünme pozları), isteğe bağlı internette araştırma, hız ayarı (0.8×–1.5×), duraklat/devam (**P**), tahta sayfaları arasında gezinme, **tahtayı PDF indirme**, anlatım seviyesi (basit/normal/ileri), **hafıza**: zorlandığın konuları kaydeder, sonraki anlatımlarda ve sınavlarda bunlara ağırlık verir.
 
+### 📦 Uygulama kendi ders paketini üretir
+
+Notlarını yükledikten sonra **Sınav** sekmesinde **📦 Konu anlatımı, özet ve deneme sınavları üret** düğmesine bas (ya da hiçbir şey yapma: yeni not eklendiğinde ~90 sn sonra kendiliğinden güncellenir; Ayarlar'dan kapatılabilir). Uygulama bu bilgisayardaki yapay zekayla (Gemini'ye ya da başka bir şirkete gerek yok; anahtar girdiysen Gemini yalnızca yedektir) şunları üretir:
+
+- taranmış sayfaların metni, **her belgenin özeti** (bölümler, kavramlar, olası sorular; hoca bunları her soruda bilir),
+- **ders planı**, **sınav rehberi**, **sınav odaklı konu anlatımı** (tanımlar, sayılı listeler eksiksiz, “Sınavda nasıl sorulabilir”), **kısa sınav özeti** (en çok ~1500 kelime; klasik soru varsa cevap şablonuyla),
+- **hocanın sınav formatına uygun deneme sınavları** (varsayılan 2, en çok 5): “Sınav formatı” kutusuna hocanın söylediğini yaz (ör. “10 D/Y, 10 test 5 şıklı, 1 metin sorusu, 2 klasik”). Her deneme ayrıca notlara karşı denetlenir; cevap anahtarı, açıklama ve kaynak sayfası vardır, doğru şıkların harfleri dengelenir.
+
+Yerel model küçük ve yavaş olduğu için iş küçük adımlara bölünür ve her adım diske yazılır: uygulama kapanırsa ya da yapay zeka hata verirse düğmeye yeniden basınca **kaldığı yerden devam eder**. Sonraki çalıştırmalarda yalnızca değişen/yeni belgeler yeniden özetlenir. Hazır ders paketinden gelen içerik (plan, rehber, paket denemeleri) korunur; hepsini yenilemek için **Baştan üret** kutusunu işaretle. Gemini anahtarı girilmiş olsa bile her istek yerel modelin bağlamına sığacak boyutta hazırlanır, böylece iş yarıda yerel yapay zekaya geçse de düzgün sürer; uzun belgeler parça parça anlatılır, tek seferde sığmayan büyük deneme sınavları bölüm bölüm üretilip denetlenir. "Baştan üret" yarıda kalırsa sonraki başlatmada da baştan üretim kurallarıyla kaldığı yerden sürer.
+
 ## En kolay kurulum (Windows)
 
 1. Python yoksa https://www.python.org/downloads/ adresinden kur. Kurulumun ilk ekranında **"Add python.exe to PATH"** kutusunu işaretlemeyi unutma.
