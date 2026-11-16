@@ -99,6 +99,14 @@ def yerel_notes_limit() -> int:
     return max(8000, int(yerel.baglam() * llm_yerel.CHARS_PER_TOKEN * 0.45))
 
 
+def kaynak_limit() -> int:
+    """Kütüphaneden bulunan kitap/makale bölümleri için karakter bütçesi (yerel modelde not bütçesinin ~%30'u).
+    Gizlilik: Gemini (bulut) açıkken kitap bölümleri ASLA gönderilmez, bütçe 0'dır."""
+    if provider() == "gemini":
+        return 0
+    return int(notes_limit() * 0.3)
+
+
 def guide_limit() -> int:
     """Hazır özetler (course_guide) için karakter bütçesi; 0 = sınırsız (Gemini)."""
     if provider() == "gemini":
@@ -258,7 +266,8 @@ def course_knowledge(course: dict | None, notes_text: str, full: bool) -> str:
 
 
 def build_system(
-    course: dict | None, notes_text: str, full: bool, memory: str, level: str, conversation: bool = False
+    course: dict | None, notes_text: str, full: bool, memory: str, level: str, conversation: bool = False,
+    kaynaklar: str = "",
 ) -> list[dict]:
     system: list[dict] = [{"type": "text", "text": prompts.TUTOR_SYSTEM}]
     knowledge = course_knowledge(course, notes_text, full)
@@ -266,6 +275,8 @@ def build_system(
         system.append({"type": "text", "text": knowledge, "cache_control": {"type": "ephemeral", "ttl": "1h"}})
     else:
         system[0]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
+    if kaynaklar:  # kütüphaneden soruyla ilgili bölümler (her soruda değişir: önbelleğe alınmaz)
+        system.append({"type": "text", "text": prompts.kaynak_block(kaynaklar)})
     extra = prompts.LEVELS.get(level, prompts.LEVELS["normal"])
     if conversation:
         extra += "\n\n" + prompts.CONVERSATION_STYLE

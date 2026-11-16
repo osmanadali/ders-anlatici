@@ -80,6 +80,11 @@ DEFAULTS = {
     "whisper_model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),  # small = hızlı, large-v3-turbo = isabetli
     "web_search": False,  # hoca gerektiğinde internette arama yapabilsin
     "otomatik_paket": True,  # yeni not eklenince özet, konu anlatımı ve deneme sınavları kendiliğinden güncellensin
+    "gomme_modeli": os.getenv("GOMME_MODELI", "qwen3-embedding:0.6b"),  # kütüphane anlam araması (yerel gömme modeli)
+    "kutuphane_ocr": False,  # kütüphanedeki taranmış PDF sayfalarını yerel yapay zekayla oku (yavaş)
+    "literatur_pdf": True,  # literatür taramasında açık erişim PDF'in tam metnini de al
+    "openalex_api_key": "",  # isteğe bağlı: OpenAlex kotası dolarsa
+    "literatur_otomatik": True,  # haftada bir literatür taraması (yeni makaleler kütüphaneye)
 }
 
 _SETTINGS_FILE = DATA_DIR / "ayarlar.json"

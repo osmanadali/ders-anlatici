@@ -306,3 +306,36 @@ fieldset.yerel progress { width: 100%; height: 10px; accent-color: var(--accent)
 body.drop::after { content: "📥 Bırak: hangi derse ait olduğunu kendisi bulur"; position: fixed; inset: 12px; border: 3px dashed var(--accent);
   border-radius: 16px; background: color-mix(in srgb, var(--bg) 80%, transparent); display: grid; place-items: center;
   font-size: 1.3em; color: var(--accent); z-index: 999; pointer-events: none; }
+
+/* ---------------- kütüphane */
+.lib-status { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin: 6px 0; }
+.lib-status .ok { color: var(--accent); font-weight: 600; } .lib-status .wait { color: var(--muted); }
+.lib-drop { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 18px 12px; border: 2px dashed var(--line); border-radius: 12px; background: var(--panel-2); transition: border-color .15s, background .15s; }
+.lib-drop.over { border-color: var(--accent); background: var(--accent-2); }
+.lib-pick { display: inline-block; cursor: pointer; border-radius: 10px; }
+.lib-h { margin: 16px 0 6px; font-size: 14px; }
+.lib-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.lib-list li { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--panel); min-width: 0; }
+.lib-list li.lib-empty { text-align: center; border-style: dashed; }
+.lib-item { display: flex; gap: 10px; align-items: flex-start; }
+.lib-ic { font-size: 22px; line-height: 1.2; }
+.lib-main { flex: 1; min-width: 0; }
+.lib-title { font-weight: 600; overflow-wrap: anywhere; }
+.lib-act { display: flex; gap: 2px; }
+.lib-act button { padding: 2px 6px; min-height: 30px; border-color: transparent; }
+.lib-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.badge { background: var(--accent-2); color: var(--accent); border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; }
+.lib-prog { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.lib-prog .bar { flex: 1; height: 6px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.lib-prog .bar i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+.lib-err { color: var(--danger); font-size: 13px; margin-top: 4px; }
+.lib-edit { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.lib-edit label { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); }
+.lib-edit input { width: 100%; min-width: 0; color: var(--text); }
+.lib-search input { flex: 1; min-width: 0; color: var(--text); }
+.lib-results { display: flex; flex-direction: column; gap: 8px; }
+.lib-card { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 8px 10px; background: var(--panel); }
+.lib-card p { margin: 6px 0 0; font-size: 13.5px; overflow-wrap: anywhere; }
+.lib-card mark { background: color-mix(in srgb, var(--c-yellow) 70%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.lib-lit { overflow-wrap: anywhere; }
+#tab-library { min-width: 0; }

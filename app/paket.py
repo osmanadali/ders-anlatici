@@ -685,6 +685,28 @@ async def _belge_ozeti(cid: str, did: str, limit: int, ilr: _Ilerleme) -> None:
     _guncelle(cid, yaz)
 
 
+async def _kutuphane_blogu(course: dict, sorgu: str, butce: int) -> str:
+    """Konu anlatımına küçük kaynak bloğu (kütüphane boşsa ya da hata olursa '')."""
+    from . import kutuphane, llm, siniflandir
+
+    try:
+        if llm.provider() == "gemini":  # gizlilik: kitaplar buluta gitmez
+            return ""
+        if await asyncio.to_thread(kutuphane.bos_mu):
+            return ""
+        ders = siniflandir.ders_kodu(course) or course.get("name", "")
+        sonuc = await asyncio.to_thread(kutuphane.ara, sorgu, ders, 3)
+        metin = kutuphane.kaynak_metni(sonuc, butce)
+    except Exception:
+        log.exception("kütüphane bloğu hazırlanamadı")
+        return ""
+    if not metin:
+        return ""
+    return ("\n\nKütüphanedeki kaynak kitaplardan ilgili bölümler (yalnızca notlardaki konuları desteklemek için kullan; "
+            "notla çelişirse notu esas al; yararlandıysan '(Kaynak: kitap, s.N)' diye belirt):\n<kaynaklar>\n"
+            f"{metin}\n</kaynaklar>")
+
+
 async def _konu(cid: str, d: dict, sistem: str, fmt: str, limit: int, ilr: _Ilerleme) -> None:
     """Belgenin konu anlatımı: belge bütçeye sığan parçalara bölünür, her parça ayrı çağrıyla anlatılır
     (uzun belgede sayfalar sessizce dışarıda kalmasın); parçalar ara kayda yazılır, kaldığı yerden sürer."""
@@ -703,6 +725,7 @@ async def _konu(cid: str, d: dict, sistem: str, fmt: str, limit: int, ilr: _Iler
     ilr.toplam += max(0, len(parcalar) - 1)
     h = d.get("hazir") or {}
     ozet = (h.get("ozet") or "")[:1500]
+    kaynak = await _kutuphane_blogu(_ders(cid), f"{d['name']} {ozet[:400]}", int(limit * 0.08))
     for j, metin in enumerate(parcalar):
         if j < len(kayit["parcalar"]):
             continue
@@ -710,7 +733,7 @@ async def _konu(cid: str, d: dict, sistem: str, fmt: str, limit: int, ilr: _Iler
         ilr.adim(f"Konu anlatımı yazılıyor: {d['name']}{ek}")
         parca = (f"Bu, belgenin {j + 1}/{len(parcalar)}. parçası: YALNIZCA bu parçadaki konuları anlat; önceki parçaların "
                  "konularını tekrar etme.") if len(parcalar) > 1 else ""
-        istem = prompts.PAKET_KONU.format(belge=d["name"], format=fmt, ozet=ozet, metin=metin, parca=parca)
+        istem = prompts.PAKET_KONU.format(belge=d["name"], format=fmt, ozet=ozet, metin=metin, parca=parca) + kaynak
         k = await _yz(Metin, istem, sistem, max_tokens=_cikti(len(istem) + len(sistem), 6000))
         kayit["parcalar"].append(k.metin.strip())
         if j + 1 < len(parcalar):

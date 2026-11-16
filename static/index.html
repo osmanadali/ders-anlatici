@@ -70,6 +70,7 @@
       <button data-tab="lecture">Ders anlat</button>
       <button data-tab="quiz">Sınav</button>
       <button data-tab="plan">Takvim</button>
+      <button data-tab="library">Kütüphane</button>
       <button data-tab="records">Kayıtlar</button>
     </nav>
 
@@ -181,6 +182,35 @@
         <button id="schedBtn" class="primary">Takvim oluştur</button>
       </div>
       <div id="schedArea"></div>
+    </div>
+
+    <!-- KÜTÜPHANE -->
+    <div class="tab-panel" id="tab-library">
+      <p class="muted">Hocanın kitapları: buraya eklediğin kitap ve makalelerden öğrenir, cevaplarında kaynak gösterir.</p>
+      <div id="libStatus" class="lib-status"></div>
+      <div id="libDrop" class="lib-drop" tabindex="0">
+        <div>📚 Kitap ve makaleleri buraya sürükle bırak</div>
+        <label class="primary small lib-pick">Dosya seç<input id="libInput" type="file" multiple accept=".pdf,.epub,.txt" hidden></label>
+        <div class="muted small">PDF, EPUB veya TXT. Dosyalar bilgisayarından çıkmaz.</div>
+      </div>
+      <div id="libMsg" class="muted small"></div>
+      <h4 class="lib-h">Kaynaklar</h4>
+      <ul id="libList" class="lib-list"></ul>
+      <h4 class="lib-h">Kütüphanede ara</h4>
+      <form id="libSearchForm" class="row lib-search">
+        <input id="libQ" type="text" placeholder="Örn. EOQ, simpleks yöntemi…">
+        <button class="primary small" type="submit">Ara</button>
+      </form>
+      <div id="libResults" class="lib-results"></div>
+      <h4 class="lib-h">Literatür taraması</h4>
+      <div id="litBox" class="profile-box lib-lit">
+        <div id="litInfo" class="muted small"></div>
+        <div class="row">
+          <button id="litNow" class="primary small">🔎 Şimdi güncelle</button>
+          <label class="small"><input id="litAuto" type="checkbox"> Otomatik (haftada bir)</label>
+        </div>
+        <div class="muted small">İnternet yalnızca literatür taraması için kullanılır.</div>
+      </div>
     </div>
 
     <!-- KAYITLAR -->

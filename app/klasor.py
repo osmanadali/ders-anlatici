@@ -101,6 +101,8 @@ BENIOKU = """NOT KUTUSU (Ders Anlatıcı)
 Hocanın notlarını (PDF ya da fotoğraf) bu klasöre bırak: Ders Anlatıcı açıkken birkaç saniye içinde
 hangi derse ait olduğunu bulur, o derse ekler ve dosyayı "Eklendi" klasörüne taşır.
 Ders paketi (.json) bırakırsan onu da kurar.
+Kitap ve makaleleri (PDF, EPUB, TXT) "Kitaplar" klasörüne bırak: hocanın kütüphanesine eklenir, hoca cevap
+verirken bu kaynaklardan yararlanıp kaynak gösterir (dosyalar bu bilgisayardan çıkmaz).
 Hangi derse ekleneceğinden emin olamazsa "Gelen notlar" dersine koyar; uygulamadan başka derse taşıyabilirsin.
 """
 
@@ -108,6 +110,7 @@ Hangi derse ekleneceğinden emin olamazsa "Gelen notlar" dersine koyar; uygulama
 def kutu_hazirla() -> Path:
     k = kutu_yolu()
     k.mkdir(parents=True, exist_ok=True)
+    (k / "Kitaplar").mkdir(exist_ok=True)
     if not (k / "BENİOKU.txt").exists():
         (k / "BENİOKU.txt").write_text(BENIOKU, "utf-8")
     return k
@@ -189,6 +192,49 @@ async def kutuyu_tara(ekle) -> int:
     return islenen
 
 
+async def kitaplari_tara() -> int:
+    """Not Kutusu/Kitaplar'a bırakılan kitapları kütüphaneye ekler, sonra Eklendi/Kitaplar'a taşır."""
+    from . import kutuphane
+
+    kd = kutu_yolu() / "Kitaplar"
+    if not kd.exists():
+        return 0
+    n = 0
+    for f in sorted(kd.iterdir()):
+        if not f.is_file() or f.name.startswith(("~$", ".")) or f.suffix.lower() not in kutuphane.UZANTILAR:
+            continue
+        if not _hazir_mi(f):
+            continue
+        try:
+            data = await asyncio.to_thread(f.read_bytes)
+            zaten = False
+            try:
+                await asyncio.to_thread(kutuphane.ekle_dosya, f.name, data, "kitap")
+            except ValueError as e:
+                if "zaten kütüphanede" not in str(e):
+                    raise
+                zaten = True  # önceki turda eklenmiş ama taşınamamış: hata sayma, taşımayı yeniden dene
+            try:
+                await asyncio.to_thread(_tasi, f, kutu_yolu() / "Eklendi" / "Kitaplar")
+            except OSError:
+                if not zaten:
+                    raise
+                continue  # hâlâ kilitli: sessiz geç, sonraki taramada tekrar denenir
+            if not zaten:
+                olay("kutuphane", f"📚 {f.name} kütüphaneye alındı; okunup dizinleniyor…")
+            n += 1
+        except Exception as e:
+            log.warning("kitap eklenemedi: %s: %s", f, e)
+            try:
+                dst = await asyncio.to_thread(_tasi, f, kutu_yolu() / "Eklenemedi")
+                dst.with_name(dst.name + ".neden.txt").write_text(f"{type(e).__name__}: {e}", "utf-8")
+            except OSError:
+                pass
+            olay("hata", f"⚠ {f.name} kütüphaneye eklenemedi: {e}")
+        _seen.pop(str(f), None)
+    return n
+
+
 def indirilenleri_tara() -> int:
     """İndirilenler'deki ders paketlerini (son 60 gün) bir kez kurar."""
     from . import hazir
@@ -226,6 +272,7 @@ async def izle(ekle, aralik: float = 5.0) -> None:
         try:
             if load_settings().get("not_kutusu", True):
                 await kutuyu_tara(ekle)
+                await kitaplari_tara()
             if time.time() - son_indirilen > 120:
                 son_indirilen = time.time()
                 await asyncio.to_thread(indirilenleri_tara)

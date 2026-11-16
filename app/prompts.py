@@ -82,6 +82,19 @@ def notes_block(course_name: str, notes_text: str, full: bool) -> str:
     )
 
 
+KAYNAK_TALIMATI = """# KAYNAK KİTAP/MAKALE BÖLÜMLERİ
+Öğrencinin kütüphanesindeki (verdiği kitaplar ve literatür taramasıyla eklenen makaleler) kaynaklardan bu soruyla ilgili bulunan bölümler aşağıda; her bölümün başında [numara], kaynak ve sayfa var.
+- Bilgiyi bu bölümlere dayandır; bölümlerde olmayan ayrıntıyı (sayı, tanım, yazar görüşü) kaynaktan geliyormuş gibi UYDURMA. Bölümler soruyla ilgisizse onları kullanma, kendi uzmanlığınla anlat.
+- Yararlandığın kaynağı anlatımın sonunda tahtaya kısa bir notla düş: {"op":"arrow_note","text":"Kaynak: <kitap>, s.N"} (sayfa yoksa bölüm).
+- Hocanın ders notu ile kaynak çelişirse sınavda hocanın notu esastır: notu esas al ve farkı kısaca söyle.
+- "YENİ MAKALE" işaretli bir bölüm varsa konuya ilgiliyse bunu "güncel gelişme" olarak bir-iki cümleyle an.
+"""
+
+
+def kaynak_block(kaynaklar: str) -> str:
+    return f"{KAYNAK_TALIMATI}<kaynak_bolumleri>\n{kaynaklar}\n</kaynak_bolumleri>"
+
+
 PAGE_EXPLAIN = (
     "Notlarımın '{doc}' belgesinin {page}. sayfasını bana anlat. Sayfanın görüntüsü ve metni ekte. "
     "Önce tahtada bu sayfayı göster (show_page), sonra sayfadaki konuları sırayla, kendi tahtanda yazarak anlat."

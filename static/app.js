@@ -109,6 +109,7 @@
   function switchTab(name) {
     document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
+    if (name === "library") libLoad(); else { clearTimeout(libTimer); libTimer = null; }
     if (name === "records") loadRecords();
     if (name === "quiz") loadWeak();
     if (name === "plan") loadPlanTab();
@@ -806,11 +807,13 @@
   }
   $("#autoInput").addEventListener("change", (e) => { const f = [...e.target.files]; e.target.value = ""; autoAdd(f); });
   // Dosyayı pencerenin herhangi bir yerine sürükleyip bırakma
-  window.addEventListener("dragover", (e) => { if (e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); document.body.classList.add("drop"); } });
+  const libAcik = () => $("#tab-library").classList.contains("active");
+  window.addEventListener("dragover", (e) => { if (libAcik()) { if (e.dataTransfer?.types?.includes("Files")) e.preventDefault(); return; } if (e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); document.body.classList.add("drop"); } });
   window.addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("drop"); });
   window.addEventListener("drop", (e) => {
     if (!e.dataTransfer?.files?.length) return;
     e.preventDefault(); document.body.classList.remove("drop");
+    if (libAcik()) { if (!e.target.closest?.("#libDrop")) toast("Kitapları Kütüphane sekmesindeki kutuya bırak."); return; }
     autoAdd(e.dataTransfer.files);
   });
 
@@ -851,6 +854,156 @@
   }
   api("/api/kutu").then((k) => { kutuSon = k.olaylar.length ? k.olaylar[k.olaylar.length - 1].id : 0; kutuKontrol(); }).catch(() => {});
   setInterval(kutuKontrol, 8000);
+
+
+  // ================================================================ kütüphane
+  const libEsc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const LIB_ICON = { kitap: "📘", makale: "📄", ders_notu: "📝" };
+  let libEditing = null, libTimer = null, libLit = null;
+  function goreli(ts) {
+    if (!ts) return "";
+    const s = Math.round(Date.now() / 1000 - ts), fut = s < 0, a = Math.abs(s);
+    let v;
+    if (a < 60) v = "az"; else if (a < 3600) v = Math.round(a / 60) + " dakika";
+    else if (a < 86400) v = Math.round(a / 3600) + " saat"; else v = Math.round(a / 86400) + " gün";
+    if (v === "az") return fut ? "birazdan" : "az önce";
+    return fut ? v + " sonra" : v + " önce";
+  }
+  function libRender(d) {
+    const st = d.durum || {};
+    $("#libStatus").innerHTML = `<span><b>${st.kaynak_sayisi ?? 0}</b> kaynak</span><span><b>${st.parca_sayisi ?? 0}</b> parça</span>` +
+      `<span class="${st.gomme_hazir ? "ok" : "wait"}">${st.gomme_hazir ? "● Anlamsal arama hazır" : "○ Anlamsal arama hazırlanıyor"}</span>` +
+      (st.isleniyor ? `<span class="wait">⏳ İşleniyor…</span>` : "");
+    const ul = $("#libList");
+    if (libEditing && ul.querySelector("form")) { /* düzenleme sürerken listeyi bozma */ }
+    else {
+      const ks = d.kaynaklar || [];
+      ul.innerHTML = ks.length ? ks.map((k) => {
+        const rozet = (k.dersler || []).map((c) => `<span class="badge">${libEsc(c)}</span>`).join("");
+        const meta = [k.yazar, k.yil].filter(Boolean).map(libEsc).join(" · ");
+        let durum = "";
+        if (k.durum === "isleniyor" || k.durum === "bekliyor") {
+          const p = Math.round((k.gomulu_orani || 0) * 100);
+          durum = `<div class="lib-prog"><div class="bar"><i style="width:${p}%"></i></div><span>${k.durum === "bekliyor" ? "Sırada" : "İşleniyor %" + p}</span></div>`;
+        } else if (k.durum === "hata") durum = `<div class="lib-err">Hata: ${libEsc(k.hata || "işlenemedi")}</div>`;
+        else if (k.sayfa_sayisi || k.parca_sayisi) durum = `<div class="muted small">${k.sayfa_sayisi ? k.sayfa_sayisi + " sayfa · " : ""}${k.parca_sayisi || 0} parça</div>`;
+        return `<li data-id="${libEsc(k.id)}"><div class="lib-item"><span class="lib-ic">${LIB_ICON[k.tur] || "📎"}</span>
+          <div class="lib-main"><div class="lib-title">${libEsc(k.baslik || k.dosya || "(adsız)")}</div>
+          ${meta ? `<div class="muted small">${meta}</div>` : ""}${rozet ? `<div class="lib-badges">${rozet}</div>` : ""}${durum}</div>
+          <div class="lib-act"><button class="ghost small" data-act="edit" title="Düzenle">✏️</button><button class="ghost small" data-act="del" title="Sil">🗑️</button></div></div></li>`;
+      }).join("") : `<li class="lib-empty muted">Henüz kaynak yok. Yukarıya bir kitap ya da makale bırakarak başla.</li>`;
+      S._libKaynak = Object.fromEntries(ks.map((k) => [k.id, k]));
+    }
+    // literatür
+    libLit = d.literatur || libLit;
+    libRenderLit();
+  }
+  function libRenderLit() {
+    const l = libLit; if (!l) return;
+    const parts = [];
+    parts.push(l.son_tarama ? `Son tarama: ${libEsc(goreli(l.son_tarama))}` : "Henüz tarama yapılmadı.");
+    if (l.otomatik && l.sonraki) parts.push(`Sonraki: ${libEsc(goreli(l.sonraki))}`);
+    const r = l.son_sonuc;
+    if (l.calisiyor) parts.push("⏳ Tarama sürüyor…");
+    else if (r) {
+      const ders = Object.entries(r.ders_bazinda || {}).map(([a, n]) => `${libEsc(a)} (${n})`).join(", ");
+      parts.push(`Son sonuç: ${Number(r.yeni) || 0} yeni makale${ders ? " — " + ders : ""}`);
+      if ((r.hatalar || []).length) parts.push(`<span class="lib-err">${r.hatalar.length} hata oluştu</span>`);
+    }
+    $("#litInfo").innerHTML = parts.map((p) => `<div>${p}</div>`).join("");
+    $("#litNow").disabled = !!l.calisiyor;
+    $("#litAuto").checked = !!l.otomatik;
+  }
+  async function libLoad() {
+    try {
+      libRender(await api("/api/kutuphane"));
+      $("#libMsg").textContent = "";
+    } catch (e) { $("#libMsg").textContent = "Kütüphane yüklenemedi: " + e.message; }
+    libSchedule();
+  }
+  function libSchedule() {
+    clearTimeout(libTimer); libTimer = null;
+    if (!$("#tab-library").classList.contains("active") || document.hidden) return;
+    const busy = [...document.querySelectorAll("#libList .lib-prog")].length || $("#libStatus .wait:last-child")?.textContent.includes("İşleniyor");
+    if (busy) libTimer = setTimeout(libLoad, 4000);
+    else if (libLit?.calisiyor) libTimer = setTimeout(libPollLit, 5000);
+  }
+  async function libPollLit() {
+    try { libLit = await api("/api/literatur"); libRenderLit(); if (!libLit.calisiyor) return libLoad(); } catch {}
+    libSchedule();
+  }
+  async function libUpload(files) {
+    files = [...files].filter((f) => /\.(pdf|epub|txt)$/i.test(f.name));
+    if (!files.length) return toast("Yalnızca PDF, EPUB veya TXT dosyaları eklenebilir.");
+    const fd = new FormData();
+    files.forEach((f) => fd.append("files", f, f.name));
+    $("#libMsg").textContent = `Yükleniyor: ${files.length} dosya…`;
+    try {
+      const r = await api("/api/kutuphane", { method: "POST", body: fd });
+      const n = (r.eklenen || []).length, at = r.atlanan || [];
+      toast(`${n} kaynak eklendi${at.length ? ", " + at.length + " atlandı: " + at.map((a) => `${a.dosya} (${a.neden})`).join("; ") : ""}.`, 7000);
+    } catch (e) { toast("Yüklenemedi: " + e.message); }
+    $("#libMsg").textContent = "";
+    libLoad();
+  }
+  $("#libInput").addEventListener("change", (e) => { const f = [...e.target.files]; e.target.value = ""; libUpload(f); });
+  const libDrop = $("#libDrop");
+  libDrop.addEventListener("dragover", (e) => { e.preventDefault(); libDrop.classList.add("over"); });
+  libDrop.addEventListener("dragleave", () => libDrop.classList.remove("over"));
+  libDrop.addEventListener("drop", (e) => { e.preventDefault(); libDrop.classList.remove("over"); document.body.classList.remove("drop"); libUpload(e.dataTransfer.files); });
+  $("#libList").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button"); if (!btn) return;
+    const li = btn.closest("li"), id = li.dataset.id, k = S._libKaynak?.[id]; if (!k) return;
+    if (btn.dataset.act === "del") {
+      if (!confirm(`“${k.baslik || k.dosya}” kütüphaneden silinsin mi?`)) return;
+      try { await api("/api/kutuphane/" + encodeURIComponent(id), { method: "DELETE" }); toast("Kaynak silindi."); } catch (err) { toast("Silinemedi: " + err.message); }
+      libEditing = null; libLoad();
+    } else if (btn.dataset.act === "edit") {
+      libEditing = id;
+      li.innerHTML = `<form class="lib-edit"><label>Başlık<input type="text" name="baslik" value="${libEsc(k.baslik)}"></label>
+        <label>Yazar<input type="text" name="yazar" value="${libEsc(k.yazar)}"></label>
+        <label>Yıl<input type="number" name="yil" value="${libEsc(k.yil)}"></label>
+        <label>Dersler (virgülle)<input type="text" name="dersler" value="${libEsc((k.dersler || []).join(", "))}" placeholder="ENM 463, ENM 301"></label>
+        <div class="row"><button class="primary small" type="submit">Kaydet</button><button class="ghost small" type="button" data-act="cancel">Vazgeç</button></div></form>`;
+    } else if (btn.dataset.act === "cancel") { libEditing = null; libLoad(); }
+  });
+  $("#libList").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = e.target, id = f.closest("li").dataset.id, v = (n) => f.elements[n].value.trim();
+    const body = { baslik: v("baslik"), yazar: v("yazar"), yil: v("yil") ? parseInt(v("yil"), 10) : null,
+      dersler: v("dersler").split(",").map((x) => x.trim()).filter(Boolean) };
+    try { await api("/api/kutuphane/" + encodeURIComponent(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); toast("Kaynak güncellendi."); }
+    catch (err) { return toast("Kaydedilemedi: " + err.message); }
+    libEditing = null; libLoad();
+  });
+  $("#libSearchForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = $("#libQ").value.trim(), box = $("#libResults");
+    if (!q) return;
+    const kod = S.course?.profile?.kod || "";
+    box.innerHTML = `<div class="muted small">Aranıyor…</div>`;
+    try {
+      const r = await api(`/api/kutuphane/ara?q=${encodeURIComponent(q)}&ders=${encodeURIComponent(kod)}`);
+      const words = q.split(/\s+/).filter((w) => w.length > 1).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const re = words.length ? new RegExp("(" + words.join("|") + ")", "gi") : null;
+      const hl = (t) => { const s = libEsc(t); return re ? s.replace(re, "<mark>$1</mark>") : s; };
+      const rs = r.sonuclar || [];
+      box.innerHTML = rs.length ? rs.map((x) => `<div class="lib-card"><div class="lib-title">${LIB_ICON[x.tur] || "📎"} ${libEsc(x.baslik)}</div>
+        <div class="muted small">${[x.yazar, x.yil, x.sayfa ? "s. " + x.sayfa : ""].filter(Boolean).map(libEsc).join(" · ")}</div>
+        <p>${hl(x.metin || "")}</p></div>`).join("") : `<div class="muted small">Sonuç bulunamadı.${kod ? " (Seçili ders: " + libEsc(kod) + ")" : ""}</div>`;
+    } catch (err) { box.innerHTML = `<div class="lib-err">Arama başarısız: ${libEsc(err.message)}</div>`; }
+  });
+  $("#litNow").addEventListener("click", async () => {
+    $("#litNow").disabled = true;
+    try { libLit = await api("/api/literatur/guncelle", { method: "POST" }); libRenderLit(); toast("Literatür taraması başladı."); }
+    catch (e) { toast("Başlatılamadı: " + e.message); $("#litNow").disabled = false; }
+    libSchedule();
+  });
+  $("#litAuto").addEventListener("change", async (e) => {
+    try { await postJSON("/api/settings", { literatur_otomatik: e.target.checked }); if (libLit) libLit.otomatik = e.target.checked; libRenderLit(); }
+    catch (err) { toast("Ayar kaydedilemedi: " + err.message); e.target.checked = !e.target.checked; }
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) libSchedule(); });
 
   // ================================================================ müfredattan ders ekle
   let programs = [];

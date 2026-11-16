@@ -328,10 +328,23 @@ async def hazirla() -> dict:
         _set("kuruluyor", "Model belleğe yükleniyor…", None)
         await warm(model)
         _set("hazir", f"{model} bu bilgisayarda çalışıyor", None)
+        _gomme_hazirla()
     except Exception as e:
         log.exception("yerel yapay zeka hazırlanamadı")
         _set("hata", str(e) or type(e).__name__, None)
     return durum()
+
+
+def _gomme_hazirla() -> None:
+    """Ana model hazır: kütüphanede kaynak varsa anlam arama (gömme) modeli de arka planda indirilip kullanılır."""
+    try:
+        from . import kutuphane
+
+        if not kutuphane.bos_mu():
+            STATE["detail"] += f"; kütüphane için gömme modeli ({kutuphane.gomme_modeli()}) hazırlanıyor"
+            kutuphane.gomme_baslat_arka_planda()
+    except Exception:
+        log.exception("gömme modeli hazırlığı başlatılamadı")
 
 
 def baslat_arka_planda() -> None:

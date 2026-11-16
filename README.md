@@ -33,6 +33,15 @@ Ayrıca: hoca karakteri (sese göre ağız hareketi, yazma/dinleme/düşünme po
 - Sen hocaya soru sorarken arka plan işleri (paket üretimi, sayfa okuma) bekler; canlı anlatım hep önceliklidir.
 - **İsteğe bağlı:** Ayarlar'a Gemini anahtarı girersen yerel model kurulurken ya da çalışmazsa yardımcı olarak kullanılır. Zorunlu değildir.
 
+### 📚 Kütüphane: kendi yapay zekan
+
+- **Kitap ve makale ekle:** Kütüphane sekmesine kitap ya da makale PDF'lerini sürükleyip bırak. Ayrıca Not Kutusu içindeki **Kitaplar** alt klasörüne koyduğun dosyalar da kendiliğinden kütüphaneye eklenir (Masaüstü ve Not Kutusu'nun kökündeki dosyalar ders notu sayılır). Yalnızca metin katmanı olan PDF'ler okunur; taranmış sayfalar için OCR ayarı arayüzde yoktur.
+- **Kaynak göstererek cevap:** Hoca bir soruyu cevaplarken kütüphanedeki ilgili bölümleri bulur ve hangi kitaptan, hangi sayfadan aldığını gösterir.
+- **Anlamsal arama:** İlk kurulumda yaklaşık 640 MB'lık bir gömme modeli iner ve arama anlamla yapılır. Bu model olmadan da kelime aramasıyla çalışır.
+- **Literatür taraması:** Haftada bir, derslerinin konularına göre Crossref, arXiv ve OpenAlex'ten yeni makaleleri bulur. Hemen taramak için Kütüphane sekmesinden **Şimdi güncelle**'ye bas.
+- **Gizlilik:** Kitapların bilgisayarından çıkmaz; Gemini yedeği açıkken bile kitap bölümleri buluta gönderilmez (o sırada cevaplar kaynaksız verilir). Literatür taramasında yalnızca makalenin başlığı, özeti ve açık erişim PDF'i iner; kişisel bilgin gönderilmez.
+- **Sınırlama:** Taranmış kitap sayfaları varsayılan olarak okunmaz. Ayarlar'dan açabilirsin, ama işlemesi yavaştır.
+
 ### 📥 Notu tanıyıp doğru derse ekler
 
 - **📥 Not ekle** düğmesi (ya da dosyayı pencereye sürükle-bırak): ders seçmene gerek yok. Uygulama notun hangi derse ait olduğunu bulur: dosya adındaki/notun içindeki ders kodu (ör. ENM 463), konu benzerliği (müfredattaki ders içerikleri ve dersin önceki notları), kararsız kalırsa yerel yapay zeka. Ders henüz yoksa müfredattan (içerik ve haftalık konularıyla) oluşturur. Birlikte yüklenen notlar aynı derse gider. Yanlış derse giderse notun yanındaki **↪** ile taşı.
@@ -155,6 +164,8 @@ app/llm_yerel.py Ollama sohbet akışı, JSON şemalı çıktılar, görüntü/P
 app/paket.py     Ders paketi üretimi (özetler, konu anlatımı, kısa özet, deneme sınavları)
 app/siniflandir.py  Notun dersini bulma (kod, paket, benzerlik, yapay zeka)
 app/klasor.py    Not Kutusu ve İndirilenler'den kendiliğinden içe aktarma
+app/kutuphane.py Yerel bilgi bankası: kitap/makale okuma, parçalama, gömme, hibrit arama, kaynak gösterme
+app/literatur.py Haftalık literatür taraması (Crossref, arXiv, OpenAlex) ve otomatik güncelleme
 app/hazir.py     Hazır ders paketleri
 app/prompts.py   Hoca talimatları ve tahta protokolü
 app/notes.py     Dersler, PDF/fotoğraf → sayfa metni + görüntü, not bağlamı

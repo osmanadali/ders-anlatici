@@ -5,7 +5,11 @@ Kullanım: fake_ollama.py serve   (OLLAMA_HOST=127.0.0.1:PORT, OLLAMA_MODELS=kla
 Gelen istekler OLLAMA_MODELS/istekler.jsonl dosyasına yazılır; testler oradan denetler.
 - /api/chat: "format" (JSON şeması) verilirse şemaya uyan örnek bir JSON, verilmezse iki anlatım adımı akıtır.
 - /api/pull: indirilen modeli OLLAMA_MODELS/modeller.json'a ekler (ilerleme satırlarıyla).
+- /api/embed: deterministik sahte gömme (kelime karması tabanlı 32 boyutlu, normalize): ortak kelimeli metinler benzer.
 """
+import hashlib
+import math
+import re
 import json
 import os
 import sys
@@ -43,6 +47,20 @@ def sample(schema: dict, root: dict | None = None):
     if t == "boolean":
         return True
     return "örnek"
+
+
+BOYUT = 32
+_KATLA = str.maketrans("İIışŞçÇğĞöÖüÜ", "iiissccggoouu")
+
+
+def sahte_vektor(metin: str) -> list[float]:
+    if "\nQuery: " in metin:  # sorgu talimatı benzerliği bozmasın
+        metin = metin.split("\nQuery: ", 1)[1]
+    v = [0.0] * BOYUT
+    for w in re.findall(r"\w{3,}", metin.translate(_KATLA).lower()):
+        v[int(hashlib.sha1(w.encode()).hexdigest(), 16) % BOYUT] += 1.0
+    n = math.sqrt(sum(x * x for x in v)) or 1.0
+    return [x / n for x in v]
 
 
 class H(BaseHTTPRequestHandler):
@@ -86,6 +104,10 @@ class H(BaseHTTPRequestHandler):
                                  {"status": "pulling", "digest": "sha256:a", "total": 1000, "completed": 500},
                                  {"status": "pulling", "digest": "sha256:a", "total": 1000, "completed": 1000},
                                  {"status": "success"}])
+        if self.path == "/api/embed":
+            girdi = body.get("input")
+            girdi = [girdi] if isinstance(girdi, str) else (girdi or [])
+            return self._json({"model": body.get("model"), "embeddings": [sahte_vektor(t) for t in girdi]})
         if self.path == "/api/generate":
             return self._json({"done": True})
         if self.path == "/api/chat":

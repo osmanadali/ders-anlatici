@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, curriculum, hazir, klasor, llm, notes, paket, prompts, siniflandir, store, voice, yerel
+from . import auth, curriculum, hazir, klasor, kutuphane, llm, notes, paket, prompts, siniflandir, store, voice, yerel
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -142,6 +142,9 @@ async def post_settings(patch: dict):
 
 
 # ---------------------------------------------------------------- hazırlık durumu
+_literatur_gorevi: asyncio.Task | None = None
+
+
 @app.on_event("startup")
 async def _warm_up():
     """Ücretsiz konuşma tanıma (Whisper) modelini açılışta arka planda hazırla (ilk seferde ~1.6 GB iner)."""
@@ -161,6 +164,19 @@ async def _warm_up():
     # Yerel yapay zeka: ilk açılışta programı ve modeli indirir, sonraki açılışlarda yalnızca başlatır.
     if os.getenv("DERS_ON_YUKLEME", "1") != "0" and load_settings().get("llm_provider") != "gemini":
         yerel.baslat_arka_planda()
+    # Kütüphane: kuyruktaki kitapları işler, gömmeleri tamamlar; literatür taraması haftada bir
+    try:
+        kutuphane.baslat_isleyici()
+    except Exception:
+        log.exception("kütüphane işleyici başlatılamadı")
+    if os.getenv("DERS_ON_YUKLEME", "1") != "0":
+        try:
+            from . import literatur
+
+            global _literatur_gorevi
+            _literatur_gorevi = asyncio.create_task(literatur.zamanlayici())
+        except Exception:
+            log.exception("literatür zamanlayıcı başlatılamadı")
     # Masaüstündeki "Not Kutusu" ve İndirilenler'deki ders paketleri kendiliğinden içe aktarılır
     if os.getenv("DERS_ON_YUKLEME", "1") != "0":
         klasor.baslat(otomatik_ekle)
@@ -419,6 +435,80 @@ async def move_doc(course_id: str, doc_id: str, body: MoveBody):
 async def kutu(son: int = 0):
     """Not Kutusu klasörü ve sonraki olaylar (arayüz bildirim olarak gösterir)."""
     return {"yol": str(klasor.kutu_yolu()), "olaylar": [o for o in klasor.OLAYLAR if o["id"] > son]}
+
+
+# ================================================================ kütüphane (kitaplar, makaleler)
+def _literatur_durum() -> dict:
+    try:
+        from . import literatur
+
+        return literatur.durum()
+    except Exception as e:
+        return {"son_tarama": None, "sonraki": None, "calisiyor": False, "son_sonuc": None,
+                "otomatik": bool(load_settings().get("literatur_otomatik", True)), "hata": f"Literatür modülü yok: {e}"}
+
+
+@app.get("/api/kutuphane")
+async def kutuphane_liste():
+    kaynaklar = await asyncio.to_thread(kutuphane.liste)
+    return {"kaynaklar": kaynaklar, "durum": await asyncio.to_thread(kutuphane.durum), "literatur": _literatur_durum()}
+
+
+@app.post("/api/kutuphane")
+async def kutuphane_ekle(files: list[UploadFile] = File(default=[]), tur: str = Form("kitap")):
+    eklenen, atlanan = [], []
+    for f in files:
+        ad = f.filename or "dosya"
+        try:
+            veri = await f.read()
+            eklenen.append(await asyncio.to_thread(kutuphane.ekle_dosya, ad, veri, tur))
+        except ValueError as e:
+            atlanan.append({"dosya": ad, "neden": str(e)})
+        except Exception as e:
+            log.exception("kütüphaneye eklenemedi: %s", ad)
+            atlanan.append({"dosya": ad, "neden": f"Eklenemedi: {e}"})
+    if not eklenen and not atlanan:
+        raise HTTPException(400, "Dosya seçilmedi")
+    return {"eklenen": eklenen, "atlanan": atlanan}
+
+
+@app.get("/api/kutuphane/ara")
+async def kutuphane_ara(q: str = "", ders: str = ""):
+    return {"sonuclar": await asyncio.to_thread(kutuphane.ara, q, ders or None, 8)}
+
+
+@app.patch("/api/kutuphane/{kid}")
+async def kutuphane_guncelle(kid: str, body: dict):
+    try:
+        return await asyncio.to_thread(kutuphane.guncelle, kid, body)
+    except KeyError:
+        raise HTTPException(404, "Kaynak bulunamadı")
+
+
+@app.delete("/api/kutuphane/{kid}")
+async def kutuphane_sil(kid: str):
+    try:
+        await asyncio.to_thread(kutuphane.sil, kid)
+    except KeyError:
+        raise HTTPException(404, "Kaynak bulunamadı")
+    return {"ok": True}
+
+
+@app.post("/api/literatur/guncelle")
+async def literatur_guncelle():
+    try:
+        from . import literatur
+
+        literatur.baslat_arka_planda(zorla=True)
+    except Exception as e:
+        log.exception("literatür taraması başlatılamadı")
+        raise HTTPException(503, f"Literatür taraması başlatılamadı: {e}")
+    return _literatur_durum()
+
+
+@app.get("/api/literatur")
+async def literatur_durum():
+    return _literatur_durum()
 
 
 @app.delete("/api/courses/{course_id}/docs/{doc_id}")
@@ -732,6 +822,19 @@ def _sse(obj: dict) -> bytes:
     return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n".encode()
 
 
+async def _kaynak_bolumleri(course: dict | None, soru: str) -> str:
+    """Kütüphaneden soruyla ilgili kitap/makale bölümleri (bütçe içinde). Kütüphane boşsa ya da hata olursa ''."""
+    try:
+        if not soru or await asyncio.to_thread(kutuphane.bos_mu):
+            return ""
+        ders = (siniflandir.ders_kodu(course) or course.get("name", "")) if course else None
+        sonuc = await asyncio.to_thread(kutuphane.ara, soru[:1500], ders, 6)
+        return kutuphane.kaynak_metni(sonuc, llm.kaynak_limit())
+    except Exception:
+        log.exception("kütüphane araması yapılamadı")
+        return ""
+
+
 @app.post("/api/ask")
 async def ask(
     text: str = Form(""),
@@ -815,10 +918,11 @@ async def ask(
     content.append({"type": "text", "text": user_text or "Ekteki görseli/dosyayı bana anlat."})
     user_msg = {"role": "user", "content": content}
 
-    nt = notes.notes_context(course, user_text, focus, limit=llm.notes_limit())
+    kaynak_txt = await _kaynak_bolumleri(course, text.strip() or user_text)
+    nt = notes.notes_context(course, user_text, focus, limit=llm.notes_limit() - len(kaynak_txt))
     system = llm.build_system(
         course, nt.text, nt.full, store.memory_summary(course_id or None), settings.get("level", "normal"),
-        conversation=(style == "konusma"),
+        conversation=(style == "konusma"), kaynaklar=kaynak_txt,
     )
     messages = session["messages"] + [user_msg]
     sid = session["id"]
