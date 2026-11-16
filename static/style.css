@@ -346,3 +346,8 @@ body.drop::after { content: "📥 Bırak: hangi derse ait olduğunu kendisi bulu
 .fb-bar button.on { border-color: var(--accent); color: var(--accent); }
 .fb-bar .fb-why { display: flex; flex-wrap: wrap; gap: 4px; }
 .fb-bar .fb-why input { font-size: 12px; padding: 2px 6px; width: 150px; }
+
+/* tam ekran tahta */
+.board-wrap:fullscreen, .board-wrap.tam-ekran { background: var(--bg); display: flex; flex-direction: column; padding: 10px; gap: 8px; }
+.board-wrap.tam-ekran { position: fixed; inset: 0; z-index: 1000; }
+.board-wrap:fullscreen .classroom, .board-wrap.tam-ekran .classroom { flex: 1; min-height: 0; height: auto; }

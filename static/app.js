@@ -315,6 +315,30 @@
   $("#prevPageBtn").onclick = () => board.show(board.view - 1);
   $("#nextPageBtn").onclick = () => board.show(board.view + 1);
   $("#exportBtn").onclick = () => { if (!board.exportPDF()) toast("Tahta boş."); };
+  // Tam ekran: tahta + hoca + kontroller. Tarayıcı desteklemiyorsa (iPhone) pencereyi kaplar.
+  const wrap = document.querySelector(".board-wrap");
+  function tamEkran() {
+    const acik = document.fullscreenElement === wrap || wrap.classList.contains("tam-ekran");
+    if (acik) {
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      wrap.classList.remove("tam-ekran");
+    } else if (wrap.requestFullscreen) {
+      wrap.requestFullscreen().catch(() => wrap.classList.add("tam-ekran"));
+    } else wrap.classList.add("tam-ekran");
+    setTimeout(() => window.dispatchEvent(new Event("resize")), 150);
+  }
+  $("#fullBtn").onclick = tamEkran;
+  document.addEventListener("fullscreenchange", () => {
+    $("#fullBtn").textContent = document.fullscreenElement ? "✕" : "⛶";
+    window.dispatchEvent(new Event("resize"));
+  });
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) && !document.activeElement?.isContentEditable) {
+      e.preventDefault(); tamEkran();
+    }
+    if (e.key === "Escape" && wrap.classList.contains("tam-ekran")) tamEkran();
+  });
   $("#newSessionBtn").onclick = () => {
     S.stream?.abort(); player.stop(); S.sessionId = ""; S.lectureActive = false;
     board.clear(); $("#chatLog").innerHTML = ""; $("#caption").textContent = "";
