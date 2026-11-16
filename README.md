@@ -1,6 +1,9 @@
 # ✎ Ders Anlatıcı
 
-Ders notlarını öğrenen, soruları **senin sesinle** (ElevenLabs klonu) anlatan ve anlatırken **tahtaya el yazısıyla yazan** kişisel ders hocası.
+Ders notlarını öğrenen, soruları **senin sesinle** (ElevenLabs klonu) anlatan ve anlatırken **tahtaya el yazısıyla yazan** kişisel ders hocası. Sınıf ortamında, tahtanın yanında duran bir **hoca karakteri** konuşur, yazarken tahtaya uzanır, sen konuşunca susup dinler.
+
+- **🎧 Konuşmalı ders:** Mikrofon sürekli açık, birebir özel ders gibi konuşursun. Hoca anlatırken konuşmaya başlarsan anında susar (söz kesme), seni dinler, cevaplar; uzun konularda parça parça anlatıp anlayıp anlamadığını sorar.
+- **Uzman hoca:** Bilgisi yüklediğin PDF'lerle sınırlı değil. Dersin müfredatındaki her konuyu kaynak kitap düzeyinde anlatır; notların varsa hocanın gösterimini izler. **📚 Müfredat** ile bölüm müfredatındaki dersleri (içerik, haftalık konular, kaynak kitaplar) tek tıkla ekleyebilirsin; not yüklemeden de ders anlatımı ve sınav çalışır. %30 İngilizce program için terimleri İngilizceleriyle birlikte verir.
 
 - Soru sor (yazarak ya da 🎤 sesli) → cevabı tek seferde metin olarak dökmez; konuşurken tahtaya satır satır yazar, formülleri çıkarır, grafiği eksenlerden başlayarak çizer.
 - Ekran görüntüsü yapıştır (Ctrl+V), fotoğraf ya da PDF ekle → neyi gördüğünü söyleyip çözer.
@@ -17,7 +20,7 @@ Ders notlarını öğrenen, soruları **senin sesinle** (ElevenLabs klonu) anlat
 | **Sınav** | Notlardan vize/final tarzı soru üretir, cevabını (yazılı ya da çözüm fotoğrafı) puanlar, geri bildirimi sesli okur, “Tahtada çöz ve anlat” |
 | **Kayıtlar** | Her anlatım sesiyle kaydedilir: baştan izle, ⚡ ile tahtayı anında göster, kaldığın yerden devam et |
 
-Ayrıca: hız ayarı (0.8×–1.5×), duraklat/devam (**P**), tahta sayfaları arasında gezinme, **tahtayı PDF indirme**, anlatım seviyesi (basit/normal/ileri), **hafıza**: zorlandığın konuları kaydeder, sonraki anlatımlarda ve sınavlarda bunlara ağırlık verir.
+Ayrıca: hoca karakteri (sese göre ağız hareketi, yazma/dinleme/düşünme pozları), isteğe bağlı internette araştırma, hız ayarı (0.8×–1.5×), duraklat/devam (**P**), tahta sayfaları arasında gezinme, **tahtayı PDF indirme**, anlatım seviyesi (basit/normal/ileri), **hafıza**: zorlandığın konuları kaydeder, sonraki anlatımlarda ve sınavlarda bunlara ağırlık verir.
 
 ## Kurulum
 
@@ -41,16 +44,22 @@ cp .env.example .env             # Windows: copy .env.example .env
 
 ## Çalıştırma
 
+**Masaüstü uygulaması gibi (önerilen):** Windows'ta `Ders Anlatıcı.bat`, Mac'te `Ders Anlatıcı.command` dosyasına çift tıkla (ya da `python baslat.py`). Uygulama adres çubuğu olmayan kendi penceresinde açılır; pencereyi kapatınca kapanır. Mikrofon izni bir kez verilir.
+
+**Tarayıcıda:**
+
 ```bash
 uvicorn app.main:app --port 8000
 ```
 
-Tarayıcıda **http://localhost:8000** adresini aç (Chrome/Edge önerilir; mikrofon için tarayıcı izin isteyecek).
+ve **http://localhost:8000** (Chrome/Edge önerilir). Adres çubuğundaki “Uygulamayı yükle” simgesiyle de masaüstüne/başlat menüsüne kurabilirsin.
+
+**Konuşmalı ders için kulaklık kullan:** hoparlörden çıkan hoca sesi mikrofona geri girerse hoca kendi sesini “söz kesme” sanabilir. Hoparlörle kullanacaksan Ayarlar'dan mikrofon hassasiyetini düşür.
 
 İlk kullanım:
-1. **+ Ders** ile ders oluştur.
-2. **Notlar** sekmesinden PDF'leri / defter fotoğraflarını yükle.
-3. **Sohbet**'ten sor ya da **Ders anlat** ile baştan dinle.
+1. **📚 Müfredat** ile bölümünün derslerini ekle (ya da **+ Ders** ile elle oluştur).
+2. **Notlar** sekmesinden hocanın PDF'lerini / defter fotoğraflarını yükle (isteğe bağlı ama önerilir).
+3. **🎧 Konuşmalı ders**'i aç ve konuşmaya başla; ya da **Ders anlat** ile baştan dinle, **Sınav** ile kendini test et.
 
 ### Anahtarsız deneme
 
@@ -87,8 +96,12 @@ app/prompts.py   Hoca talimatları ve tahta protokolü
 app/notes.py     Dersler, PDF/fotoğraf → sayfa metni + görüntü, not bağlamı
 app/voice.py     ElevenLabs TTS (klon ses) ve STT (sesli soru)
 app/store.py     Kayıtlar ve hafıza (zayıf konular)
+app/curriculum.py, app/mufredat/  Hazır bölüm müfredatları → ders profilleri
+baslat.py        Masaüstü penceresinde başlatıcı
 static/board.js  El yazısı tahta: metin açılımı, çizgi çizgi grafik/şekil çizimi, PDF dışa aktarma
 static/player.js Ses + tahta senkron oynatıcı (duraklat, hız, söz kesme)
+static/teacher.js      Hoca karakteri (SVG, ağız senkronu, pozlar)
+static/conversation.js Konuşmalı mod: ses etkinliği algılama, söz kesme, WAV kaydı
 static/app.js    Arayüz
 tests/           Birim + API testleri (sahte servislerle), demo sunucu
 ```

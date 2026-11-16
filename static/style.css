@@ -137,3 +137,51 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 #printArea .print-page { page-break-after: always; background: #23302b; color: #f3f1e8; padding: 24px 30px; min-height: 95vh;
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 #printArea .b-item { clip-path: none !important; }
+
+/* ---------------- sınıf: tahta + hoca */
+.classroom { flex: 1; display: flex; gap: 0; min-height: 0; position: relative; border-radius: 12px; padding: 10px 0 0 10px;
+  background: linear-gradient(#d9cbb4 0 88%, #9c7a55 88% 100%); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .classroom { background: linear-gradient(#3b352d 0 88%, #4d3b29 88% 100%); } }
+:root[data-theme="dark"] .classroom { background: linear-gradient(#3b352d 0 88%, #4d3b29 88% 100%); }
+.classroom .board { margin-bottom: 9%; }
+.teacher { width: 200px; flex: none; align-self: flex-end; position: relative; margin-left: -14px; }
+.teacher-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.teacher .t-body { animation: breathe 4s ease-in-out infinite; transform-box: view-box; transform-origin: 112px 420px; }
+@keyframes breathe { 50% { transform: translateY(-2px) scaleY(1.005); } }
+.teacher .t-arm-l, .teacher .t-arm-r, .teacher .t-head { transform-box: view-box; transition: transform .45s cubic-bezier(.3,.7,.3,1); }
+.teacher .t-arm-l { transform-origin: 70px 170px; }
+.teacher .t-arm-r { transform-origin: 154px 170px; }
+.teacher .t-head { transform-origin: 112px 150px; }
+.teacher .t-eyes { transform-box: fill-box; transform-origin: center; transition: transform .06s; }
+.teacher .t-bubble { opacity: 0; transition: opacity .3s; fill: #fff; stroke: #fff; }
+.teacher .t-bubble text { fill: #333; stroke: none; font: 700 18px Inter, sans-serif; }
+.teacher .t-listen { stroke: var(--accent); fill: none; }
+.teacher[data-state="writing"] .t-arm-l { transform: rotate(118deg); animation: scribble .5s ease-in-out infinite alternate; }
+@keyframes scribble { from { transform: rotate(112deg); } to { transform: rotate(124deg); } }
+.teacher[data-state="writing"] .t-head { transform: rotate(-8deg); }
+.teacher[data-state="talking"] .t-arm-r { animation: gesture 2.6s ease-in-out infinite; }
+@keyframes gesture { 0%, 100% { transform: rotate(0); } 40% { transform: rotate(-24deg); } 60% { transform: rotate(-18deg); } }
+.teacher[data-state="talking"] .t-head { animation: nod 3.2s ease-in-out infinite; }
+@keyframes nod { 30% { transform: rotate(2deg); } 70% { transform: rotate(-2deg); } }
+.teacher[data-state="listening"] .t-head { transform: rotate(7deg); }
+.teacher[data-state="listening"] .t-listen { opacity: 1; animation: pulse 1.2s infinite; }
+.teacher[data-state="thinking"] .t-head { transform: rotate(-4deg) translateY(-2px); }
+.teacher[data-state="thinking"] .t-think { opacity: .95; }
+.teacher-status { position: absolute; bottom: 4px; left: 0; right: 0; text-align: center; font-size: 12px; color: #fff;
+  text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+@media (max-width: 900px) { .teacher { width: 120px; } }
+
+/* ---------------- konuşmalı mod */
+#convBtn.on { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+.mic-meter { width: 46px; height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; display: inline-block; vertical-align: middle; }
+.mic-meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .08s; }
+.mic-meter.speaking i { background: var(--danger); }
+
+.cur-list { max-height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.cur-list h4 { margin: 10px 0 4px; font-size: 13px; }
+.cur-list label { display: flex; gap: 6px; align-items: baseline; font-size: 13px; color: var(--text) !important; flex-direction: row !important; }
+.cur-list .en { color: var(--muted); font-size: 12px; }
+.profile-box { background: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 6px 0; }
+.profile-box summary { cursor: pointer; font-weight: 600; }
+.profile-box ol { margin: 6px 0; padding-left: 20px; }
+#planFocus { width: 100%; margin: 6px 0; }

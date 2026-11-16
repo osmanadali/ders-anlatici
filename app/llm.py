@@ -125,19 +125,33 @@ def normalize_step(obj: dict) -> dict | None:
 
 
 # ---------------------------------------------------------------- canlı anlatım
-def build_system(course: dict | None, notes_text: str, full: bool, memory: str, level: str) -> list[dict]:
+def course_knowledge(course: dict | None, notes_text: str, full: bool) -> str:
+    """Dersin müfredat profili + ders notları (önbelleğe alınan büyük blok)."""
+    if not course:
+        return ""
+    parts = []
+    profile = prompts.course_profile_block(course)
+    if profile:
+        parts.append(profile)
+    if notes_text:
+        parts.append(prompts.notes_block(course["name"], notes_text, full))
+    elif not profile:
+        parts.append(f"# DERS: {course['name']}\nBu ders için henüz not yüklenmedi; konuyu kendi uzmanlığınla anlat.")
+    return "\n\n".join(parts)
+
+
+def build_system(
+    course: dict | None, notes_text: str, full: bool, memory: str, level: str, conversation: bool = False
+) -> list[dict]:
     system: list[dict] = [{"type": "text", "text": prompts.TUTOR_SYSTEM}]
-    if course and notes_text:
-        system.append(
-            {
-                "type": "text",
-                "text": prompts.notes_block(course["name"], notes_text, full),
-                "cache_control": {"type": "ephemeral", "ttl": "1h"},
-            }
-        )
+    knowledge = course_knowledge(course, notes_text, full)
+    if knowledge:
+        system.append({"type": "text", "text": knowledge, "cache_control": {"type": "ephemeral", "ttl": "1h"}})
     else:
         system[0]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
     extra = prompts.LEVELS.get(level, prompts.LEVELS["normal"])
+    if conversation:
+        extra += "\n\n" + prompts.CONVERSATION_STYLE
     if memory:
         extra += "\n\n" + memory
     system.append({"type": "text", "text": extra})
@@ -148,6 +162,10 @@ async def stream_steps(system: list[dict], messages: list[dict]) -> AsyncIterato
     """Anlatım adımlarını üretildikçe verir. Son olarak {"final": [...içerik blokları...]} verir."""
     s = load_settings()
     parser = StepParser()
+    extra = {}
+    if s.get("web_search"):
+        # Güncel ya da notlarda/kitaplarda bulunmayan bilgiler için internette arama (isteğe bağlı).
+        extra["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 3}]
     try:
         async with client().beta.messages.stream(
             model=s["claude_model"],
@@ -158,6 +176,7 @@ async def stream_steps(system: list[dict], messages: list[dict]) -> AsyncIterato
             cache_control={"type": "ephemeral"},
             betas=[FALLBACK_BETA],
             fallbacks="default",
+            **extra,
         ) as stream:
             async for text in stream.text_stream:
                 for obj in parser.feed(text):
@@ -246,15 +265,19 @@ def _notes_system(course: dict, notes_text: str, full: bool) -> list[dict]:
     return [
         {
             "type": "text",
-            "text": "Sen titiz bir üniversite hocasısın. Türkçe yaz.\n\n" + prompts.notes_block(course["name"], notes_text, full),
+            "text": "Sen bu dersin uzman ve titiz öğretim üyesisin. Türkçe yaz.\n\n" + course_knowledge(course, notes_text, full),
             "cache_control": {"type": "ephemeral", "ttl": "1h"},
         }
     ]
 
 
-async def lecture_plan(course: dict, notes_text: str, full: bool) -> LecturePlan:
-    scope = "Notların tamamı verildi." if full else "Notların bir kısmı verildi."
-    return await _parse(LecturePlan, prompts.LECTURE_PLAN.format(scope=scope), _notes_system(course, notes_text, full))
+async def lecture_plan(course: dict, notes_text: str, full: bool, focus: str = "") -> LecturePlan:
+    if notes_text:
+        source = "Ders notlarının sırasını izle; notlarda eksik kalan ama konuyu anlamak için gereken temelleri de ekle."
+    else:
+        source = "Henüz ders notu yok: ders profilindeki içerik ve haftalık konulardan, kaynak kitap düzeyinde bir plan çıkar."
+    focus = f"Sadece şu kapsama odaklan: {focus}" if focus else ""
+    return await _parse(LecturePlan, prompts.LECTURE_PLAN.format(source=source, focus=focus), _notes_system(course, notes_text, full))
 
 
 async def make_quiz(course: dict, notes_text: str, full: bool, count: int, difficulty: str, topic: str, weak: str) -> Quiz:

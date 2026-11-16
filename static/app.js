@@ -2,12 +2,17 @@
 (function () {
   const $ = (s) => document.querySelector(s);
   const board = new Board($("#board"));
+  const teacher = new Teacher($("#teacher"));
+  document.addEventListener("pointerdown", () => teacher.unlock(), { capture: true });
+  document.addEventListener("keydown", () => teacher.unlock(), { capture: true });
+  function teacherStatus(t) { $("#teacherStatus").textContent = t || ""; }
   const S = {
     courses: [], courseId: "", course: null, sessionId: "",
     attachments: [], pageCtx: null, viewer: { doc: null, page: 1 },
     stream: null, streamOpen: false, tutorBubble: null,
     plan: null, lectureIdx: -1, lectureActive: false,
     settings: {}, quiz: null, micPausedPlayer: false,
+    conv: null, convPaused: false,
   };
 
   const player = new Player(board, {
@@ -20,10 +25,16 @@
     },
     onState(st) {
       $("#playBtn").textContent = st === "paused" ? "▶" : "⏸";
+      if (st === "idle") teacher.setState(S.streamOpen ? "thinking" : S.conv ? "listening" : "idle");
+      if (st === "paused" && !S.convPaused && !S.micPausedPlayer) teacher.setState("idle");
     },
+    onAudio(audio) { teacher.fakeTalk = !audio || !teacher.attachAudio(audio); },
+    onSpeak(on, drawing) { if (on) { teacher.setState(drawing ? "writing" : "talking"); teacherStatus(""); } },
     onIdle() {
       if (!S.streamOpen) {
         $("#caption").textContent = "";
+        teacher.setState(S.conv ? "listening" : "idle");
+        teacherStatus(S.conv ? "Seni dinliyorum…" : "");
         if (S.lectureActive && $("#autoNext").checked) setTimeout(nextSection, 1200);
       }
     },
@@ -74,6 +85,7 @@
 
   // ================================================================ anlatım isteği (SSE akışı)
   async function ask({ text = "", mode = "chat", doc_id = "", page = 0, section = null, files = [], label = "" }) {
+    teacher.unlock();
     let interrupted = "";
     if (S.streamOpen || player.busy) {
       interrupted = player.currentSay;
@@ -93,12 +105,15 @@
     fd.append("page", String(page || 0));
     if (section) fd.append("section", JSON.stringify(section));
     if (interrupted) fd.append("interrupted", interrupted);
+    if (S.conv) fd.append("style", "konusma");
     files.forEach((f) => fd.append("files", f, f.name));
 
     const shown = label || text || (doc_id ? `Sayfa ${page}` : "");
     addMsg("user", shown + (ctx && mode === "chat" ? `  (📄 ${ctx.label})` : ""), files.map((f) => f.name));
     S.tutorBubble = addMsg("tutor", "");
     $("#caption").textContent = "Düşünüyor…";
+    teacher.setState("thinking");
+    teacherStatus("");
 
     const ctrl = new AbortController();
     S.stream = ctrl;
@@ -263,6 +278,64 @@
     }
   }
   function stopRec() { if (rec && rec.state === "recording") rec.stop(); }
+  // ---------------- konuşmalı ders (eller serbest)
+  async function toggleConversation() {
+    if (S.conv) {
+      S.conv.stop(); S.conv = null;
+      $("#convBtn").classList.remove("on"); $("#micMeter").classList.add("hidden");
+      teacherStatus("");
+      if (!player.busy) teacher.setState("idle");
+      if (S.convPaused) { S.convPaused = false; player.resume(); }
+      return;
+    }
+    teacher.unlock();
+    const conv = new Conversation({
+      isTutorSpeaking: () => player.state === "playing",
+      onSpeechStart() {
+        if (player.state === "playing") { player.pause(); S.convPaused = true; }
+        teacher.setState("listening");
+        teacherStatus("Dinliyorum…");
+      },
+      onFalseStart() {
+        if (S.convPaused) { S.convPaused = false; player.resume(); }
+        else if (!player.busy) teacher.setState(S.streamOpen ? "thinking" : "listening");
+      },
+      async onUtterance(wav) {
+        teacherStatus("Anlamaya çalışıyorum…");
+        try {
+          const fd = new FormData();
+          fd.append("file", wav, "soru.wav");
+          const { text } = await api("/api/stt", { method: "POST", body: fd });
+          if (!text || text.replace(/[^\p{L}\p{N}]/gu, "").length < 2) { this.onFalseStart(); teacherStatus("Seni dinliyorum…"); return; }
+          S.convPaused = false;
+          const files = S.attachments; S.attachments = []; renderAttachments();
+          ask({ text, files });
+        } catch (e) {
+          toast("Ses anlaşılamadı: " + e.message);
+          this.onFalseStart();
+        }
+      },
+      onLevel(level, state) {
+        const m = $("#micMeter");
+        m.firstElementChild.style.width = Math.round(level * 100) + "%";
+        m.classList.toggle("speaking", state === "speaking");
+      },
+    });
+    try { await conv.start(); }
+    catch (e) { toast("Mikrofon açılamadı: " + e.message); return; }
+    conv.sensitivity = Number(localGet("sens") || 1);
+    S.conv = conv;
+    $("#convBtn").classList.add("on"); $("#micMeter").classList.remove("hidden");
+    toast("Konuşmalı ders açık. Kulaklık kullanırsan hoca kendi sesini duyup durmaz.", 5000);
+    if (!player.busy && !S.streamOpen) {
+      const hi = S.course ? `Merhaba! ${S.course.name} dersine hazırım. Hangi konudan başlayalım? İstediğin an sözümü kesebilirsin.`
+                          : "Merhaba! Hazırım. Takıldığın yeri anlat, istediğin an sözümü kesebilirsin.";
+      S.tutorBubble = addMsg("tutor", "");
+      player.enqueue({ say: hi, board: [], audio: S.settings.tts_enabled === false ? null : "/api/tts?text=" + encodeURIComponent(hi) });
+    }
+  }
+  $("#convBtn").onclick = toggleConversation;
+
   function resumeIfMicPaused() { if (S.micPausedPlayer) { S.micPausedPlayer = false; player.resume(); } $("#caption").textContent = ""; }
   $("#micBtn").onclick = () => (rec ? stopRec() : startRec());
   // Boşluk tuşunu basılı tut = bas-konuş
@@ -304,12 +377,24 @@
     switchTab("notes");
   };
 
+  function renderProfile() {
+    const box = $("#profileBox"), p = S.course?.profile;
+    if (!p) { box.classList.add("hidden"); return; }
+    box.classList.remove("hidden");
+    const esc = (t) => String(t || "").replace(/</g, "&lt;");
+    box.innerHTML = `<details><summary>📚 Ders profili: ${esc(p.kod)} ${esc(p.ad)}${p.dil ? " · " + esc(p.dil) : ""}${p.akts ? " · " + p.akts + " AKTS" : ""}</summary>
+      ${p.ad_en ? `<div class="muted">${esc(p.ad_en)}</div>` : ""}<p>${esc(p.icerik)}</p>
+      ${(p.haftalik_konular || []).length ? "<ol>" + p.haftalik_konular.map((t) => `<li>${esc(t)}</li>`).join("") + "</ol>" : ""}
+      ${(p.kaynak_kitaplar || []).length ? `<div class="muted">Kaynaklar: ${esc(p.kaynak_kitaplar.join("; "))}</div>` : ""}</details>`;
+  }
+
   function renderDocs() {
+    renderProfile();
     const ul = $("#docList");
     ul.innerHTML = "";
     $("#pageViewer").classList.add("hidden");
     if (!S.course) { ul.innerHTML = '<li class="muted">Önce üstten bir ders seç ya da “+ Ders” ile oluştur.</li>'; return; }
-    if (!S.course.docs.length) { ul.innerHTML = '<li class="muted">Bu derste henüz not yok. PDF ya da defter fotoğrafı yükle.</li>'; }
+    if (!S.course.docs.length) ul.innerHTML = `<li class="muted">Bu derste henüz not yok. PDF ya da defter fotoğrafı yükle.${S.course.profile ? " (Not olmasa da hoca müfredattaki konuları anlatabilir.)" : ""}</li>`;
     let pendingOcr = 0;
     S.course.docs.forEach((d) => {
       const ocr = d.pages.filter((p) => p.needs_ocr).length;
@@ -368,13 +453,43 @@
     renderDocs();
   });
 
+  // ================================================================ müfredattan ders ekle
+  let programs = [];
+  function renderCurriculum() {
+    const p = programs.find((x) => x.id === $("#curProgram").value);
+    if (!p) return;
+    $("#curNote").innerHTML = (p.not || "").replace(/</g, "&lt;") + (p.kaynaklar.length ? `<br>Kaynak: ${p.kaynaklar.slice(0, 2).map((u) => `<a href="${u}" target="_blank" rel="noopener">${new URL(u).hostname}</a>`).join(", ")}` : "");
+    const have = new Set(S.courses.map((c) => c.profile?.kod).filter(Boolean));
+    const bySem = {};
+    p.dersler.forEach((d) => (bySem[d.yariyil || 0] ||= []).push(d));
+    $("#curList").innerHTML = Object.keys(bySem).sort((a, b) => a - b).map((sem) =>
+      `<h4>${sem > 0 ? sem + ". yarıyıl" : "Seçmeli / diğer"}</h4>` + bySem[sem].map((d) =>
+        `<label><input type="checkbox" value="${d.kod}" ${have.has(d.kod) ? "checked disabled" : ""}> <span><b>${d.kod}</b> ${d.ad}${d.dil === "İngilizce" ? " 🇬🇧" : ""} <span class="en">${d.ad_en || ""}${have.has(d.kod) ? " · eklendi" : ""}</span></span></label>`
+      ).join("")).join("");
+  }
+  $("#curriculumBtn").onclick = async () => {
+    try { programs = await api("/api/curriculum"); } catch (e) { return toast(e.message); }
+    if (!programs.length) return toast("Kayıtlı müfredat yok.");
+    $("#curProgram").innerHTML = programs.map((p) => `<option value="${p.id}">${p.program}</option>`).join("");
+    renderCurriculum();
+    $("#curDlg").showModal();
+  };
+  $("#curProgram").onchange = renderCurriculum;
+  $("#curImport").onclick = async () => {
+    const codes = [...document.querySelectorAll("#curList input:checked:not(:disabled)")].map((i) => i.value);
+    if (!codes.length) return;
+    const made = await postJSON("/api/curriculum/import", { program: $("#curProgram").value, codes });
+    toast(`${made.length} ders eklendi. Her birinin hocası müfredattaki konuları biliyor.`);
+    await loadCourses(made[0]?.id);
+  };
+
   // ================================================================ dersi baştan anlat
   $("#planBtn").onclick = async () => {
     if (!S.courseId) return toast("Önce bir ders seç.");
     $("#planBtn").disabled = true;
     $("#planStatus").textContent = "Notları okuyup ders planı çıkarıyorum… (bir dakika sürebilir)";
     try {
-      S.plan = await postJSON("/api/lecture/plan", { course_id: S.courseId });
+      S.plan = await postJSON("/api/lecture/plan", { course_id: S.courseId, focus: $("#planFocus").value.trim() });
       $("#planStatus").textContent = S.plan.title + " — başlamak için bir bölüme tıkla.";
       renderPlan();
     } catch (e) { $("#planStatus").textContent = "Hata: " + e.message; }
@@ -581,6 +696,8 @@
     $("#setLevel").value = st.level;
     $("#setEffort").value = st.effort;
     $("#setTts").checked = st.tts_enabled !== false;
+    $("#setWeb").checked = !!st.web_search;
+    $("#setSens").value = localGet("sens") || "1";
     $("#settingsDlg").showModal();
     try {
       const voices = await api("/api/voices");
@@ -605,7 +722,10 @@
       level: $("#setLevel").value,
       effort: $("#setEffort").value,
       tts_enabled: $("#setTts").checked,
+      web_search: $("#setWeb").checked,
     });
+    localSet("sens", $("#setSens").value);
+    if (S.conv) S.conv.sensitivity = Number($("#setSens").value);
     toast("Ayarlar kaydedildi.");
   };
 

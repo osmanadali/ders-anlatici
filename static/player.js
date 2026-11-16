@@ -81,6 +81,7 @@
       let speechDone;
       if (audio) {
         this.current.audio = audio;
+        this.hooks.onAudio?.(audio);
         audio.playbackRate = this.rate;
         speechDone = new Promise((res) => {
           audio.onended = res;
@@ -90,13 +91,17 @@
         try { await audio.play(); } catch (e) { console.warn("ses çalınamadı", e); }
       } else if (step.say) {
         durMs = Math.max(1200, step.say.length * 62);
+        this.hooks.onAudio?.(null);
         speechDone = this._browserSpeak(step.say, durMs);
       } else {
         durMs = 900;
         speechDone = Promise.resolve();
       }
-      const drawing = this.board.render(step.board, durMs * WRITE_SHARE);
+      const hasDrawing = (step.board || []).some((o) => o && o.op && o.op !== "newpage");
+      this.hooks.onSpeak?.(true, hasDrawing);
+      const drawing = this.board.render(step.board, durMs * WRITE_SHARE).then(() => this.hooks.onSpeak?.(true, false));
       await Promise.all([speechDone, drawing]);
+      this.hooks.onSpeak?.(false, false);
     }
 
     _browserSpeak(text, estMs) {

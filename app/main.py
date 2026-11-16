@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import llm, notes, prompts, store, voice
+from . import curriculum, llm, notes, prompts, store, voice
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -168,18 +168,28 @@ class SpeakBody(BaseModel):
     text: str
 
 
-@app.post("/api/tts")
-async def tts(body: SpeakBody):
-    """Kısa metinleri (sınav geri bildirimi vb.) seslendirir; önbellekli."""
+async def _cached_tts(text: str) -> FileResponse:
     s = load_settings()
-    key = hashlib.sha1(f"{s['voice_id']}|{s['tts_model']}|{body.text}".encode()).hexdigest()
+    key = hashlib.sha1(f"{s['voice_id']}|{s['tts_model']}|{text}".encode()).hexdigest()
     path = TTS_CACHE / f"{key}.mp3"
     if not path.exists():
         try:
-            await _tts_to_file(path, body.text[:2500], "", "")
+            await _tts_to_file(path, text[:2500], "", "")
         except voice.VoiceError as e:
             raise HTTPException(502, str(e))
     return FileResponse(path, media_type="audio/mpeg")
+
+
+@app.post("/api/tts")
+async def tts(body: SpeakBody):
+    """Kısa metinleri (sınav geri bildirimi vb.) seslendirir; önbellekli."""
+    return await _cached_tts(body.text)
+
+
+@app.get("/api/tts")
+async def tts_get(text: str):
+    """<audio src> ile doğrudan çalınabilen sürüm (selamlama vb.)."""
+    return await _cached_tts(text[:500])
 
 
 @app.post("/api/stt")
@@ -207,6 +217,7 @@ async def ask(
     page: int = Form(0),
     section: str = Form(""),  # ders modu: {"i":..,"n":..,"title":..,"summary":..,"pages":[..],"prev":..}
     interrupted: str = Form(""),  # öğrencinin kestiği yerdeki cümle
+    style: str = Form(""),  # "konusma" = sesli karşılıklı ders (kısa, soru soran üslup)
     files: list[UploadFile] = File(default=[]),
 ):
     settings = load_settings()
@@ -281,7 +292,8 @@ async def ask(
 
     nt = notes.notes_context(course, user_text, focus)
     system = llm.build_system(
-        course, nt.text, nt.full, store.memory_summary(course_id or None), settings.get("level", "normal")
+        course, nt.text, nt.full, store.memory_summary(course_id or None), settings.get("level", "normal"),
+        conversation=(style == "konusma"),
     )
     messages = session["messages"] + [user_msg]
     sid = session["id"]
@@ -337,19 +349,45 @@ async def ask(
     return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
 
+# ================================================================ hazır müfredat
+@app.get("/api/curriculum")
+async def curriculum_list():
+    return curriculum.programs()
+
+
+class ImportBody(BaseModel):
+    program: str
+    codes: list[str]
+
+
+@app.post("/api/curriculum/import")
+async def curriculum_import(body: ImportBody):
+    try:
+        return curriculum.import_courses(body.program, body.codes)
+    except KeyError:
+        raise HTTPException(404, "Program bulunamadı")
+
+
 # ================================================================ ders anlatım planı
 class PlanBody(BaseModel):
     course_id: str
+    focus: str = ""
+
+
+def _require_material(course: dict | None) -> None:
+    if not course:
+        raise HTTPException(404, "Ders bulunamadı")
+    if not course["docs"] and not course.get("profile"):
+        raise HTTPException(400, "Bu derste ne not ne de müfredat bilgisi var. Not yükle ya da dersi müfredattan ekle.")
 
 
 @app.post("/api/lecture/plan")
 async def lecture_plan(body: PlanBody):
     course = notes.get_course(body.course_id)
-    if not course or not course["docs"]:
-        raise HTTPException(400, "Önce bu derse not yükle.")
-    nt = notes.notes_context(course)
+    _require_material(course)
+    nt = notes.notes_context(course, body.focus)
     try:
-        plan = await llm.lecture_plan(course, nt.text, nt.full)
+        plan = await llm.lecture_plan(course, nt.text, nt.full, body.focus)
     except llm.TutorError as e:
         raise HTTPException(502, str(e))
     return plan.model_dump()
@@ -366,8 +404,7 @@ class QuizBody(BaseModel):
 @app.post("/api/quiz/generate")
 async def quiz_generate(body: QuizBody):
     course = notes.get_course(body.course_id)
-    if not course or not course["docs"]:
-        raise HTTPException(400, "Önce bu derse not yükle.")
+    _require_material(course)
     nt = notes.notes_context(course, body.topic)
     try:
         quiz = await llm.make_quiz(
@@ -430,6 +467,17 @@ async def session_delete(sid: str):
 @app.exception_handler(ValueError)
 async def value_error(_, exc: ValueError):
     return JSONResponse({"detail": str(exc)}, status_code=400)
+
+
+@app.get("/sw.js")
+async def service_worker():
+    # Kök kapsamlı olması için /sw.js adresinden sunulur.
+    return FileResponse(STATIC / "sw.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/manifest.webmanifest")
+async def manifest():
+    return FileResponse(STATIC / "manifest.webmanifest", media_type="application/manifest+json")
 
 
 @app.get("/favicon.ico")

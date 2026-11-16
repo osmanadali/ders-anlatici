@@ -10,20 +10,29 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.2/math.min.js"></script>
 <link rel="stylesheet" href="/static/style.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon-192.png">
+<meta name="theme-color" content="#2f6f5e">
 </head>
 <body>
 <header class="topbar">
   <div class="brand">✎ Ders Anlatıcı</div>
   <select id="courseSelect" title="Ders"></select>
   <button id="newCourseBtn" class="ghost" title="Yeni ders">+ Ders</button>
+  <button id="curriculumBtn" class="ghost" title="Bölüm müfredatından dersleri ekle">📚 Müfredat</button>
   <div class="spacer"></div>
+  <button id="convBtn" class="ghost" title="Mikrofon sürekli açık: konuşarak ders, istediğin an sözünü kes">🎧 Konuşmalı ders</button>
+  <span id="micMeter" class="mic-meter hidden"><i></i></span>
   <button id="newSessionBtn" class="ghost" title="Yeni anlatım başlat">Yeni anlatım</button>
   <button id="settingsBtn" class="ghost" title="Ayarlar">⚙ Ayarlar</button>
 </header>
 
 <main class="layout">
   <section class="board-wrap">
-    <div id="board" class="board" aria-live="polite"></div>
+    <div class="classroom">
+      <div id="board" class="board" aria-live="polite"></div>
+      <div id="teacher" class="teacher" data-state="idle"><div id="teacherStatus" class="teacher-status"></div></div>
+    </div>
     <div class="board-bar">
       <button id="playBtn" class="round" title="Duraklat / devam (P)">⏸</button>
       <button id="stopBtn" class="round" title="Anlatımı durdur">⏹</button>
@@ -78,6 +87,7 @@
         </label>
         <span id="uploadStatus" class="muted"></span>
       </div>
+      <div id="profileBox" class="profile-box hidden"></div>
       <ul id="docList" class="doc-list"></ul>
       <div id="pageViewer" class="page-viewer hidden">
         <div class="row">
@@ -94,7 +104,8 @@
 
     <!-- DERS ANLAT -->
     <div class="tab-panel" id="tab-lecture">
-      <p class="muted">Kaçırdığın dersi notlarından baştan sona, bölüm bölüm anlatır.</p>
+      <p class="muted">Kaçırdığın dersi baştan sona, bölüm bölüm anlatır. Not yüklediysen notlarını izler; yüklemediysen müfredattaki konulardan kendisi anlatır.</p>
+      <input id="planFocus" type="text" placeholder="İsteğe bağlı kapsam: ör. 3-5. haftalar ya da “simpleks yöntemi”">
       <div class="row">
         <button id="planBtn" class="primary">Ders planı çıkar</button>
         <label class="check"><input id="autoNext" type="checkbox" checked> Bölümler arası otomatik geç</label>
@@ -145,14 +156,31 @@
       <select id="setEffort"><option value="low">Hızlı</option><option value="medium">Dengeli</option><option value="high">Derin (zor sorular)</option></select>
     </label>
     <label class="check"><input id="setTts" type="checkbox"> Klon sesle konuş (kapalıysa tarayıcı sesi)</label>
+    <label class="check"><input id="setWeb" type="checkbox"> Gerekirse internette araştırabilsin (daha yavaş)</label>
+    <label>Konuşmalı modda mikrofon hassasiyeti
+      <input id="setSens" type="range" min="0.6" max="1.6" step="0.1" value="1">
+    </label>
     <menu><button value="cancel" class="ghost">Kapat</button><button id="saveSettings" value="ok" class="primary">Kaydet</button></menu>
+  </form>
+</dialog>
+
+<dialog id="curDlg">
+  <form method="dialog" class="settings">
+    <h3>Müfredattan ders ekle</h3>
+    <select id="curProgram"></select>
+    <p id="curNote" class="muted small"></p>
+    <div id="curList" class="cur-list"></div>
+    <menu><button value="cancel" class="ghost">Kapat</button><button id="curImport" value="ok" class="primary">Seçilenleri ekle</button></menu>
   </form>
 </dialog>
 
 <div id="toast" class="toast hidden"></div>
 
 <script src="/static/board.js"></script>
+<script src="/static/teacher.js"></script>
+<script src="/static/conversation.js"></script>
 <script src="/static/player.js"></script>
 <script src="/static/app.js"></script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});</script>
 </body>
 </html>

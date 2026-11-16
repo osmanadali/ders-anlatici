@@ -30,6 +30,7 @@ DEFAULTS = {
     "effort": os.getenv("EFFORT", "medium"),
     "level": "normal",  # basit | normal | ileri
     "tts_enabled": True,
+    "web_search": False,  # hoca gerektiğinde internette arama yapabilsin
 }
 
 _SETTINGS_FILE = DATA_DIR / "ayarlar.json"

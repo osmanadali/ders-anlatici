@@ -1,7 +1,13 @@
 """Claude'a verilen talimatlar. Asıl sihir burada: model cevabı tek seferde yazmıyor,
 'konuş + tahtaya yaz' adımlarına bölüyor; arayüz her adımı sesle eşzamanlı canlandırıyor."""
 
-TUTOR_SYSTEM = r"""Sen sabırlı, samimi ve çok iyi anlatan bir Türk üniversite hocasısın. Öğrencin derse gidemediği ya da derste anlamadığı konuları evde senden öğreniyor. Sesli anlatıyorsun ve aynı anda önündeki tahtaya el yazısıyla yazıyorsun; tıpkı özel ders veren bir hoca gibi.
+TUTOR_SYSTEM = r"""Sen sabırlı, samimi ve çok iyi anlatan bir Türk üniversite hocasısın; anlattığın dersin alanında uzman bir öğretim üyesisin. Öğrencin derse gidemediği ya da derste anlamadığı konuları evde senden öğreniyor. Sınıfta, tahtanın önündesin: sesli anlatıyorsun ve aynı anda tahtaya el yazısıyla yazıyorsun; birebir özel ders veriyorsun.
+
+# BİLGİ KAYNAĞIN
+Bilgin ders notlarıyla SINIRLI DEĞİL. Dersin müfredatındaki her konuyu standart ders kitapları düzeyinde, derinlemesine ve doğru biçimde anlatabilirsin: tanımlar, teoremler ve ispat fikirleri, formüllerin nereden geldiği, çözümlü örnekler, sık yapılan hatalar, sınavda nasıl sorulduğu, mühendislikteki uygulaması. Öğrencinin her sorusunu cevapla.
+- Ders notları verildiyse onlar "hocanın sınıfta anlattığı"dır: gösterimi, terimleri ve yaklaşımı oradan al, notlarla çelişme. Notlarda olmayan bir şeyi anlatıyorsan bunu doğal bir dille belirt ("notlarında yok ama sınavda işine yarar...").
+- Ders müfredatı (ders profili) verildiyse kapsamı ve konu sırasını oradan bil; öğrenci "bu derste neler var / sıradaki konu ne" derse oradan cevapla.
+- Program %30 İngilizcedir: dersin dili İngilizce ise ya da terim İngilizce kaynaklarda geçiyorsa, kavramın İngilizcesini de söyle ve tahtaya yaz (ör. "Doğrusal programlama (linear programming)"). Anlatım dili her zaman Türkçe.
 
 # ÇIKTI BİÇİMİ (çok önemli)
 Cevabını SADECE satır satır JSON nesneleri olarak yaz (her satır tek bir geçerli JSON nesnesi, başka hiçbir metin, markdown ya da ``` yok). Her satır bir "anlatım adımı"dır:
@@ -70,9 +76,10 @@ PAGE_EXPLAIN = (
     "Önce tahtada bu sayfayı göster (show_page), sonra sayfadaki konuları sırayla, kendi tahtanda yazarak anlat."
 )
 
-LECTURE_PLAN = """Aşağıdaki ders notlarından, dersi kaçırmış bir öğrenciye baştan sona anlatılacak bir ders planı çıkar.
-Notların sırasını izle. Her bölüm 3-8 dakikalık bir anlatım olsun; bölüm sayısı notların uzunluğuna göre 3 ile 15 arası.
-{scope}"""
+LECTURE_PLAN = """Dersi kaçırmış bir öğrenciye baştan sona anlatılacak bir ders planı çıkar.
+{source}
+Her bölüm 3-8 dakikalık bir anlatım olsun; bölüm sayısı 3 ile 15 arası.
+{focus}"""
 
 LECTURE_SECTION = (
     "Şimdi ders anlatımındayız: '{course}' dersi, {i}/{n}. bölüm: \"{title}\".\n"
@@ -84,7 +91,7 @@ LECTURE_SECTION = (
     "ve sıradaki bölüme geçeceğimizi söyle (son bölümse dersi toparla)."
 )
 
-QUIZ_GEN = """Ders notlarına dayanarak öğrenciyi sınava hazırlayacak {count} soru hazırla.
+QUIZ_GEN = """Ders notlarına ve ders müfredatına dayanarak öğrenciyi sınava hazırlayacak {count} soru hazırla.
 Zorluk: {difficulty}. {topic}
 Soru türlerini karıştır: çoktan seçmeli (4 şık) ve kısa cevaplı/işlemli açık uçlu.
 Gerçek bir üniversite vize/final sınavında çıkabilecek tarzda olsun. Her sorunun hangi konuyla ve hangi not sayfasıyla ilgili olduğunu belirt.
@@ -103,3 +110,39 @@ OCR_PAGE = (
     "Formülleri LaTeX ile ($...$) yaz, şekil/grafik varsa köşeli parantez içinde kısaca betimle: [Şekil: ...]. "
     "Sadece sayfanın içeriğini yaz, yorum ekleme."
 )
+
+
+CONVERSATION_STYLE = (
+    "ŞU AN SESLİ, KARŞILIKLI KONUŞUYORSUNUZ (birebir özel ders). Öğrenci seninle konuşarak soru soruyor, "
+    "istediği an sözünü kesebiliyor. Cevapların kısa ve sohbet havasında olsun: çoğunlukla 2-6 adım. "
+    "Uzun bir konu anlatıyorsan bir parçayı anlat, sonra dur ve öğrenciye anlayıp anlamadığını sor ya da ona "
+    "kısa bir soru sor; cevabını bekle. Öğrenci 'tamam / devam' derse kaldığın yerden sürdür. "
+    "Öğrenci bir soruya cevap verdiyse önce cevabını değerlendir (doğruysa takdir et, yanlışsa nerede yanıldığını göster). "
+    "Sesli konuşmadan yazıya çevrildiği için öğrencinin cümlelerinde küçük yazım hataları olabilir; anlamı tahmin et."
+)
+
+
+def course_profile_block(course: dict) -> str:
+    """Ders profili: müfredat bilgisi (içerik, haftalık konular, kaynak kitaplar)."""
+    p = course.get("profile") or {}
+    if not p:
+        return ""
+    lines = [f"# DERS PROFİLİ: {course['name']}"]
+    if p.get("kod"):
+        lines.append(f"Kod: {p['kod']}" + (f" | İngilizce adı: {p['ad_en']}" if p.get("ad_en") else ""))
+    if p.get("program"):
+        lines.append(f"Program: {p['program']}")
+    if p.get("yariyil"):
+        lines.append(f"Yarıyıl: {p['yariyil']}" + (f" | Dersin dili: {p['dil']}" if p.get("dil") else ""))
+    if p.get("on_kosul"):
+        lines.append(f"Ön koşul: {p['on_kosul']}")
+    if p.get("icerik"):
+        lines.append(f"İçerik: {p['icerik']}")
+    if p.get("haftalik_konular"):
+        lines.append("Haftalık konular:\n" + "\n".join(f"  {i}. hafta: {t}" for i, t in enumerate(p["haftalik_konular"], 1)))
+    if p.get("kaynak_kitaplar"):
+        lines.append("Kaynak kitaplar: " + "; ".join(p["kaynak_kitaplar"]))
+    lines.append(
+        "Bu dersin uzman hocası olarak, müfredattaki tüm konuları notlar olmasa da kaynak kitaplar düzeyinde anlatabilirsin."
+    )
+    return "\n".join(lines)

@@ -52,7 +52,7 @@ async def fake_transcribe(audio, filename="", content_type=""):
     return "Parabolün tepe noktası nasıl bulunur?"
 
 
-async def fake_plan(course, notes_text, full):
+async def fake_plan(course, notes_text, full, focus=""):
     return llm.LecturePlan(
         title="Fonksiyonlar",
         sections=[
