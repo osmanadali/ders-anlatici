@@ -13,7 +13,7 @@ import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer
 
 const BOARD_W = 3.2, BOARD_H = 1.92, BOARD_Y = 1.62;      // metre
 const BOARD_PX_W = 760, BOARD_PX_H = 456;                  // tahtanın HTML boyutu
-const HOME = new THREE.Vector3(1.85, 0, 0.9);              // tahtanın sağında bekleme yeri
+const HOME = new THREE.Vector3(1.6, 0, 0.9);              // tahtanın sağında bekleme yeri
 const UPPER = 0.3, FORE = 0.28;                            // kol uzunlukları
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -178,7 +178,7 @@ export function mount({ root, board, teacher2d, onError }) {
   const scene = new THREE.Scene();
   const cssScene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(36, 1.6, 0.1, 50);
-  camera.position.set(0.25, 1.6, 4.3);
+  camera.position.set(0.25, 1.6, 3.6);
 
   // duvar + tahta (HTML) — CSS3D
   const wall = document.createElement("div"); wall.className = "wall3d";
@@ -346,14 +346,14 @@ export function mount({ root, board, teacher2d, onError }) {
     let wantPos, wantLook;
     if (pen) {
       // Kamera yazılan noktanın SOLUNDAN bakar: hoca (yazının sağında durur) yazıyı kapatmaz
-      wantPos = new THREE.Vector3(pen.x - 0.55, 1.72, 4.2);
+      wantPos = new THREE.Vector3(pen.x - 0.5, 1.7, 3.5);
       wantLook = new THREE.Vector3(pen.x + 0.05, lerp(1.5, pen.y, 0.4), 0);
     } else if (S.approach && st === "talking") {
-      wantPos = new THREE.Vector3(pos.x * 0.4 + 0.2, 1.62, 4.4);
+      wantPos = new THREE.Vector3(pos.x * 0.4 + 0.2, 1.62, 3.8);
       wantLook = new THREE.Vector3(pos.x * 0.6, lerp(1.4, head.y, 0.5), pos.z * 0.6);
     } else {
       // tahta ekranı doldursun (yakın kadraj), hoca sağda görünür kalsın
-      wantPos = new THREE.Vector3(0.25, 1.6, 4.3);
+      wantPos = new THREE.Vector3(0.25, 1.6, 3.6);
       wantLook = new THREE.Vector3(0.2, 1.5, 0);
     }
     wantPos.x += Math.sin(t * 0.31) * 0.05; wantPos.y += Math.sin(t * 0.43) * 0.025;  // elde tutulmuş hafif salınım

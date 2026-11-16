@@ -62,23 +62,30 @@ app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 # ================================================================ 3B hoca modeli (Tripo vb. iskeletli GLB)
-TEACHER_GLB = DATA_DIR / "hoca.glb"
+TEACHER_GLB = DATA_DIR / "hoca.glb"  # kullanıcının yüklediği model
+VARSAYILAN_GLB = STATIC / "hoca_varsayilan.glb"  # uygulamayla gelen hoca (Tripo, iskeletli)
+
+
+def _hoca_glb():
+    return TEACHER_GLB if TEACHER_GLB.exists() else (VARSAYILAN_GLB if VARSAYILAN_GLB.exists() else None)
 
 
 @app.get("/api/teacher-model/info")
 async def teacher_model_info():
-    if not TEACHER_GLB.exists():
+    glb = _hoca_glb()
+    if not glb:
         return {"exists": False}
-    st = TEACHER_GLB.stat()
+    st = glb.stat()
     return {"exists": True, "version": f"{int(st.st_mtime)}-{st.st_size}"}
 
 
 @app.api_route("/api/teacher-model", methods=["GET", "HEAD"])
 async def teacher_model():
-    if not TEACHER_GLB.exists():
+    glb = _hoca_glb()
+    if not glb:
         raise HTTPException(404, "Model yok")
-    st = TEACHER_GLB.stat()
-    return FileResponse(TEACHER_GLB, media_type="model/gltf-binary", headers={"ETag": f'"{int(st.st_mtime)}-{st.st_size}"'})
+    st = glb.stat()
+    return FileResponse(glb, media_type="model/gltf-binary", headers={"ETag": f'"{int(st.st_mtime)}-{st.st_size}"'})
 
 
 @app.post("/api/teacher-model")
