@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, curriculum, hazir, klasor, llm, notes, prompts, siniflandir, store, voice, yerel
+from . import auth, curriculum, hazir, klasor, llm, notes, paket, prompts, siniflandir, store, voice, yerel
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -145,6 +145,10 @@ async def post_settings(patch: dict):
 @app.on_event("startup")
 async def _warm_up():
     """Ücretsiz konuşma tanıma (Whisper) modelini açılışta arka planda hazırla (ilk seferde ~1.6 GB iner)."""
+    try:
+        paket.acilista_duzelt()  # kapanırken yarıda kalan paket üretimleri "yarida" görünsün
+    except Exception:
+        log.exception("paket durumları düzeltilemedi")
     if load_settings().get("stt_provider") == "whisper" and os.getenv("DERS_ON_YUKLEME", "1") != "0":
         # arka plan iş parçacığı (daemon): indirme sürerken uygulama kapatılırsa kapanmayı engellemez
         import threading
@@ -334,6 +338,7 @@ async def _add_doc(course_id: str, filename: str, data: bytes) -> dict:
     except Exception:
         log.exception("hazır paket uygulanamadı: %s", filename)
     _schedule_ocr(course_id, doc)
+    paket.yeni_belge(course_id)  # ayar açıksa biraz bekleyip ders paketini artımlı günceller
     return doc
 
 
@@ -405,6 +410,8 @@ async def move_doc(course_id: str, doc_id: str, body: MoveBody):
         await asyncio.to_thread(notes.move_document, course_id, doc_id, body.hedef)
     except KeyError as e:
         raise HTTPException(404, str(e))
+    paket.yeni_belge(body.hedef)  # iki dersin paketi de güncellensin
+    paket.yeni_belge(course_id)
     return {"ok": True}
 
 
@@ -449,6 +456,7 @@ async def _process_recording(course_id: str, doc_id: str, content_type: str) -> 
                  for i, sec in enumerate(organized.sections)]
         notes.update_doc(course_id, doc_id, pages=pages, status="",
                          **({"name": organized.title} if organized.title else {}))
+        paket.yeni_belge(course_id)
     except (voice.VoiceError, llm.TutorError) as e:
         notes.update_doc(course_id, doc_id, status=f"Hata: {e}")
     except Exception as e:  # beklenmeyen hata da kullanıcıya görünsün
@@ -489,6 +497,40 @@ async def make_formula_sheet(course_id: str, body: FocusBody):
     data = sheet.model_dump() | {"created": time.time(), "focus": body.focus}
     notes.set_course_field(course_id, "formula_sheet", data)
     return {"course": course["name"], "sheet": data}
+
+
+# ---------------------------------------------------------------- uygulamanın kendi ürettiği ders paketi
+class PaketBody(BaseModel):
+    deneme_sayisi: int = 2
+    yeniden: bool = False
+
+
+@app.post("/api/courses/{course_id}/paket")
+async def paket_baslat(course_id: str, body: PaketBody | None = None):
+    body = body or PaketBody()
+    try:
+        return paket.baslat(course_id, body.deneme_sayisi, body.yeniden)
+    except KeyError:
+        raise HTTPException(404, "Ders bulunamadı")
+
+
+@app.get("/api/courses/{course_id}/paket")
+async def paket_durum(course_id: str):
+    if not notes.get_course(course_id):
+        raise HTTPException(404, "Ders bulunamadı")
+    return paket.durum(course_id)
+
+
+class FormatBody(BaseModel):
+    metin: str = ""
+
+
+@app.post("/api/courses/{course_id}/sinav-formati")
+async def sinav_formati(course_id: str, body: FormatBody):
+    c = notes.set_course_field(course_id, "sinav_formati", body.metin.strip()[:4000])
+    if not c:
+        raise HTTPException(404, "Ders bulunamadı")
+    return {"ok": True, "metin": c["sinav_formati"]}
 
 
 # ---------------------------------------------------------------- sınav takvimi
@@ -596,6 +638,7 @@ def _schedule_ocr(course_id: str, doc: dict) -> None:
             async with sem:
                 try:
                     png = (await asyncio.to_thread(notes.page_image_path, course_id, doc["id"], n)).read_bytes()
+                    await llm.arka_plan_sirasi()
                     text = await llm.ocr_page(png)
                     notes.set_page_text(course_id, doc["id"], n, text)
                 except Exception as e:  # tek sayfa hatası tüm belgeyi durdurmasın
@@ -606,6 +649,7 @@ def _schedule_ocr(course_id: str, doc: dict) -> None:
     t = asyncio.create_task(run())
     _ocr_tasks.add(t)
     t.add_done_callback(_ocr_tasks.discard)
+    paket.arka_ocr_ekle(course_id, t)  # paket işi aynı sayfaları ikinci kez okumasın, bunun bitmesini beklesin
 
 
 # ================================================================ ses
@@ -784,6 +828,11 @@ async def ask(
     )
 
     async def gen():
+        with llm.on_plan():  # öğrenci soruyor: arka plan işleri (paket, OCR) yerel modeli bırakır
+            async for chunk in gen_inner():
+                yield chunk
+
+    async def gen_inner():
         yield _sse({"type": "session", "id": sid})
         steps: list[dict] = []
         final = None
@@ -936,7 +985,8 @@ async def lecture_plan(body: PlanBody):
     _require_material(course)
     nt = notes.notes_context(course, body.focus, limit=llm.notes_limit())
     try:
-        plan = await llm.lecture_plan(course, nt.text, nt.full, body.focus)
+        with llm.on_plan():
+            plan = await llm.lecture_plan(course, nt.text, nt.full, body.focus)
     except llm.TutorError as e:
         raise HTTPException(502, str(e))
     return plan.model_dump()
@@ -956,10 +1006,11 @@ async def quiz_generate(body: QuizBody):
     _require_material(course)
     nt = notes.notes_context(course, body.topic, limit=llm.notes_limit())
     try:
-        quiz = await llm.make_quiz(
-            course, nt.text, nt.full, max(1, min(body.count, 20)), body.difficulty, body.topic,
-            store.memory_summary(body.course_id),
-        )
+        with llm.on_plan():
+            quiz = await llm.make_quiz(
+                course, nt.text, nt.full, max(1, min(body.count, 20)), body.difficulty, body.topic,
+                store.memory_summary(body.course_id),
+            )
     except llm.TutorError as e:
         raise HTTPException(502, str(e))
     return quiz.model_dump()
@@ -981,7 +1032,8 @@ async def quiz_grade(
     if not answer.strip() and img is None:
         raise HTTPException(400, "Cevap boş")
     try:
-        g = await llm.grade(q, answer, img)
+        with llm.on_plan():
+            g = await llm.grade(q, answer, img)
     except llm.TutorError as e:
         raise HTTPException(502, str(e))
     store.record_topic(course_id or None, g.mistake_topic or q.get("topic", ""), g.correct and g.score >= 0.7)

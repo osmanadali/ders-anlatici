@@ -62,6 +62,28 @@ def save_course(course: dict) -> None:
     (d / "ders.json").write_text(json.dumps(course, ensure_ascii=False, indent=2), "utf-8")
 
 
+_LOCKS: dict[str, threading.RLock] = {}
+_LOCKS_LOCK = threading.Lock()
+
+
+def course_lock(course_id: str) -> threading.RLock:
+    """Ders başına kilit: oku-değiştir-yaz adımları (ör. iş parçacığındaki not yükleme ile arka plandaki paket işi)
+    birbirinin değişikliğini ezmesin."""
+    with _LOCKS_LOCK:
+        return _LOCKS.setdefault(course_id, threading.RLock())
+
+
+def update_course(course_id: str, fn) -> dict | None:
+    """Dersi kilit altında diskten yeniden okur, fn(course) ile değiştirir ve kaydeder. Ders yoksa None."""
+    with course_lock(course_id):
+        course = get_course(course_id)
+        if course is None:
+            return None
+        fn(course)
+        save_course(course)
+        return course
+
+
 def create_course(name: str) -> dict:
     course = {"id": _new_id(), "name": name.strip() or "Yeni ders", "created": time.time(), "docs": []}
     save_course(course)
@@ -108,9 +130,11 @@ def _render_page(pdf_path: Path, page: int, out: Path) -> None:
 
 
 def add_document(course_id: str, filename: str, data: bytes) -> dict:
-    """PDF'i sayfalara ayırır (metin + görüntü) ya da fotoğrafı tek sayfalık belge yapar."""
-    course = get_course(course_id)
-    if course is None:
+    """PDF'i sayfalara ayırır (metin + görüntü) ya da fotoğrafı tek sayfalık belge yapar.
+
+    Ağır iş (PDF bölme) ders okunmadan ÖNCE yapılır; belge sonra kilit altında, dersin o anki hali yeniden
+    okunarak eklenir. Böylece bölme sürerken başka bir işin (ör. paket üretimi) kaydettikleri ezilmez."""
+    if get_course(course_id) is None:
         raise KeyError("ders bulunamadı")
     ext = Path(filename).suffix.lower()
     doc_id = _new_id()
@@ -118,13 +142,16 @@ def add_document(course_id: str, filename: str, data: bytes) -> dict:
     d.mkdir(parents=True, exist_ok=True)
 
     try:
-        return _add_document(course, course_id, filename, data, ext, doc_id, d)
+        doc = _build_document(filename, data, ext, doc_id, d)
+        if update_course(course_id, lambda c: c["docs"].append(doc)) is None:
+            raise KeyError("ders bulunamadı")
+        return doc
     except Exception:
         shutil.rmtree(d, ignore_errors=True)  # yarım kalan belge klasörünü bırakma
         raise
 
 
-def _add_document(course: dict, course_id: str, filename: str, data: bytes, ext: str, doc_id: str, d: Path) -> dict:
+def _build_document(filename: str, data: bytes, ext: str, doc_id: str, d: Path) -> dict:
     pages: list[dict] = []
     if ext == ".pdf":
         (d / "kaynak.pdf").write_bytes(data)
@@ -147,8 +174,6 @@ def _add_document(course: dict, course_id: str, filename: str, data: bytes, ext:
         "added": time.time(),
         "pages": pages,
     }
-    course["docs"].append(doc)
-    save_course(course)
     return doc
 
 
@@ -192,44 +217,44 @@ def find_doc(course: dict, doc_id: str) -> dict | None:
 
 
 def set_page_text(course_id: str, doc_id: str, page: int, text: str) -> None:
-    course = get_course(course_id)
-    doc = find_doc(course, doc_id) if course else None
-    if not doc:
-        return
-    for p in doc["pages"]:
-        if p["n"] == page:
-            p["text"] = text
-            p["needs_ocr"] = False
-    save_course(course)
+    def f(course):
+        for p in (find_doc(course, doc_id) or {}).get("pages", []):
+            if p["n"] == page:
+                p["text"] = text
+                p["needs_ocr"] = False
+
+    update_course(course_id, f)
 
 
 def move_document(course_id: str, doc_id: str, target_id: str) -> dict:
     """Belgeyi (sayfaları, görüntüleri ve okunmuş metinleriyle) başka derse taşır."""
-    src, dst = get_course(course_id), get_course(target_id)
-    if not src or not dst:
-        raise KeyError("ders bulunamadı")
-    doc = find_doc(src, doc_id)
-    if not doc:
-        raise KeyError("belge bulunamadı")
     if course_id == target_id:
+        doc = find_doc(get_course(course_id) or {"docs": []}, doc_id)
+        if not doc:
+            raise KeyError("belge bulunamadı")
         return doc
-    old, new = doc_dir(course_id, doc_id), doc_dir(target_id, doc_id)
-    new.parent.mkdir(parents=True, exist_ok=True)
-    if old.exists():
-        shutil.move(str(old), new)
-    dst["docs"].append(doc)
-    save_course(dst)
-    src["docs"] = [d for d in src["docs"] if d["id"] != doc_id]
-    save_course(src)
-    return doc
+    first, second = sorted((course_id, target_id))  # iki kilidi hep aynı sırayla al: kilitlenme olmasın
+    with course_lock(first), course_lock(second):
+        src, dst = get_course(course_id), get_course(target_id)
+        if not src or not dst:
+            raise KeyError("ders bulunamadı")
+        doc = find_doc(src, doc_id)
+        if not doc:
+            raise KeyError("belge bulunamadı")
+        old, new = doc_dir(course_id, doc_id), doc_dir(target_id, doc_id)
+        new.parent.mkdir(parents=True, exist_ok=True)
+        if old.exists():
+            shutil.move(str(old), new)
+        dst["docs"].append(doc)
+        save_course(dst)
+        src["docs"] = [d for d in src["docs"] if d["id"] != doc_id]
+        save_course(src)
+        return doc
 
 
 def delete_document(course_id: str, doc_id: str) -> None:
-    course = get_course(course_id)
-    if not course:
+    if update_course(course_id, lambda c: c.__setitem__("docs", [d for d in c["docs"] if d["id"] != doc_id])) is None:
         return
-    course["docs"] = [d for d in course["docs"] if d["id"] != doc_id]
-    save_course(course)
     shutil.rmtree(doc_dir(course_id, doc_id), ignore_errors=True)
 
 
@@ -307,8 +332,9 @@ def add_audio_document(course_id: str, filename: str, data: bytes) -> dict:
     (d / f"kaynak{ext}").write_bytes(data)
     doc = {"id": doc_id, "name": Path(filename).stem, "kind": "audio", "added": time.time(), "pages": [],
            "status": "Yazıya dökülüyor…"}
-    course["docs"].append(doc)
-    save_course(course)
+    if update_course(course_id, lambda c: c["docs"].append(doc)) is None:  # dersin o anki hali yeniden okunur
+        shutil.rmtree(d, ignore_errors=True)
+        raise KeyError("ders bulunamadı")
     return doc
 
 
@@ -317,18 +343,13 @@ def audio_source(course_id: str, doc_id: str) -> Path | None:
 
 
 def update_doc(course_id: str, doc_id: str, **fields) -> None:
-    course = get_course(course_id)
-    doc = find_doc(course, doc_id) if course else None
-    if not doc:
-        return
-    doc.update(fields)
-    save_course(course)
+    def f(course):
+        doc = find_doc(course, doc_id)
+        if doc:
+            doc.update(fields)
+
+    update_course(course_id, f)
 
 
 def set_course_field(course_id: str, key: str, value) -> dict | None:
-    course = get_course(course_id)
-    if not course:
-        return None
-    course[key] = value
-    save_course(course)
-    return course
+    return update_course(course_id, lambda c: c.__setitem__(key, value))

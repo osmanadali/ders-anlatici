@@ -43,6 +43,37 @@ def _backends() -> list[str]:
     return [first, other]
 
 
+# ---------------------------------------------------------------- ön plan önceliği
+# Yerel model aynı anda tek isteği işler: öğrenci soru sorarken arka plan işleri (paket üretimi, OCR) bekler,
+# yoksa canlı anlatım uzun bir arka plan çağrısının arkasında kalıp zaman aşımına düşer.
+import asyncio as _asyncio  # noqa: E402
+import time as _time  # noqa: E402
+
+_on_plan = 0
+_son_etkinlik = 0.0
+SESSIZ_SURE = float(__import__("os").getenv("DERS_SESSIZ_SURE", "45"))  # sn: son sorudan sonra arka plan işleri bu kadar bekler (öğrenci devam edebilir)
+
+
+class on_plan:
+    """main.ask içinde: bu blok sürerken ve bittikten SESSIZ_SURE sn sonrasına kadar arka plan işleri bekler."""
+
+    def __enter__(self):
+        global _on_plan, _son_etkinlik
+        _on_plan += 1
+        _son_etkinlik = _time.time()
+
+    def __exit__(self, *a):
+        global _on_plan, _son_etkinlik
+        _on_plan -= 1
+        _son_etkinlik = _time.time()
+
+
+async def arka_plan_sirasi() -> None:
+    """Arka plan yapay zeka çağrısından önce: öğrenci hoca ile konuşuyorsa sırasını bekle (yalnızca yerel modelde)."""
+    while provider() == "yerel" and (_on_plan > 0 or _time.time() - _son_etkinlik < SESSIZ_SURE):
+        await _asyncio.sleep(2)
+
+
 def ai_hazir() -> bool:
     """Şu an bir yapay zeka cevap verebilir mi (yerel hazır ya da Gemini anahtarı var)?"""
     return yerel.hazir() or bool(gemini_key())
@@ -60,6 +91,12 @@ def notes_limit() -> int:
     if provider() == "gemini":
         return FULL_NOTES_CHAR_LIMIT
     return max(8000, int(yerel.baglam() * llm_yerel.CHARS_PER_TOKEN * 0.36))
+
+
+def yerel_notes_limit() -> int:
+    """Yerel modelin bağlamına sığan not bütçesi (karakter), hocanın uzun sistem talimatı olmadan. Hangi beyin cevap
+    verirse versin istek sığsın diye uzun arka plan işleri (paket üretimi) bunu üst sınır olarak kullanır."""
+    return max(8000, int(yerel.baglam() * llm_yerel.CHARS_PER_TOKEN * 0.45))
 
 
 def guide_limit() -> int:

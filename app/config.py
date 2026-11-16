@@ -79,6 +79,7 @@ DEFAULTS = {
     "stt_provider": os.getenv("STT_PROVIDER", "whisper"),  # whisper (ücretsiz) | elevenlabs (ücretli, isteğe bağlı)
     "whisper_model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),  # small = hızlı, large-v3-turbo = isabetli
     "web_search": False,  # hoca gerektiğinde internette arama yapabilsin
+    "otomatik_paket": True,  # yeni not eklenince özet, konu anlatımı ve deneme sınavları kendiliğinden güncellensin
 }
 
 _SETTINGS_FILE = DATA_DIR / "ayarlar.json"

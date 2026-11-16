@@ -150,3 +150,28 @@ def test_edge_ulasilamazsa_internetsiz_ses(monkeypatch):
     monkeypatch.setattr(voice, "_piper", lambda text: b"RIFF-piper")
     config.save_settings({"tts_provider": "edge"})
     assert asyncio.run(voice.real_speak("Merhaba")) == b"RIFF-piper"
+
+
+def test_paket_uretimi_yalnizca_yerel_yapay_zekayla(kurulum, monkeypatch):
+    """Ders paketi üretimi Gemini'ye bağlı değildir: anahtar yokken her adım yerel modele (sahte Ollama) gider."""
+    from app import notes, paket
+    from conftest import make_text_pdf
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)  # başka testler anahtar bırakmış olabilir
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    assert not config.gemini_key()
+    assert asyncio.run(yerel.hazirla())["state"] == "hazir"
+    c = notes.create_course("Kalite")
+    notes.add_document(c["id"], "hafta1.pdf", make_text_pdf(["Kalite kavrami musteri beklentilerini karsilama derecesidir."]))
+
+    async def run():
+        paket.baslat(c["id"], deneme_sayisi=1)
+        await paket.bekle(c["id"])
+
+    asyncio.run(run())
+    course = notes.get_course(c["id"])
+    assert course["paket_is"]["durum"] == "bitti", course["paket_is"]
+    assert "yerel yapay zeka" in course["paket_is"]["adim"]
+    assert course["docs"][0]["hazir"]["paket"] == "uretilen" and course["konu_anlatimi"] and len(course["denemeler"]) == 1
+    chats = [r["body"] for r in _log(kurulum) if r["path"] == "/api/chat"]
+    assert len(chats) == 7 and all(b.get("format") for b in chats)  # özet, plan, rehber, konu, kısa özet, deneme, denetim

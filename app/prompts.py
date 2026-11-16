@@ -210,3 +210,112 @@ DEEP_SOLVE = (
     "Sonucu bağımsız bir yolla kontrol et. Ders notları ve müfredat verildiyse onların gösterimini kullan. "
     "Soru bir problem değil de kavram sorusuysa: adımlar = kavramı açıklamanın mantıksal sırası, gerekçe = neden doğru olduğu."
 )
+
+
+# ---------------------------------------------------------------- uygulamanın kendi ürettiği ders paketi (app/paket.py)
+# Yerel model küçük bağlamlıdır: her talimat tek bir küçük işi ister, notlar parça parça verilir.
+PAKET_SYSTEM = (
+    "Sen '{ders}' dersinin uzman ve titiz öğretim üyesisin; öğrenciyi bu dersin sınavına hazırlıyorsun. "
+    "Yalnızca verilen ders notlarına ve özetlere dayan; notlarda olmayan bilgi, tanım ya da sayfa numarası uydurma. "
+    "Hocanın terimlerini ve gösterimini koru. Türkçe yaz; matematiği $...$ içinde LaTeX ile yaz."
+)
+
+VARSAYILAN_SINAV_FORMATI = (
+    "Genel üniversite vize/final formatı: Doğru/Yanlış soruları, 5 şıklı çoktan seçmeli sorular, "
+    "kısa cevaplı açık uçlu sorular ve açıklama gerektiren klasik sorular."
+)
+
+PAKET_PARCA = """'{belge}' belgesinin {i}/{n}. parçası aşağıda (her sayfanın başında numarası var). Sınava çalışacak öğrenci için bu parçanın özetini çıkar:
+- baslik: parçanın konusu (kısa).
+- ozet: 4-8 cümlelik öz: ana fikirler, sıralamalar, sınıflandırmalar.
+- bolumler: parçadaki konu başlıkları; her biri için sayfa aralığı ("3-5") ve 1-2 cümle.
+- kavramlar: tanımı bilinmesi gereken terimler (notlardaki tanımla, kısa) ve geçtiği sayfa numarası.
+- olasi_sorular: bu parçadan sınavda sorulabilecek 3-6 soru.
+<notlar>
+{metin}
+</notlar>"""
+
+PAKET_BIRLESTIR = """'{belge}' belgesinin parça parça çıkarılmış özetleri aşağıda. Bunları tek bir belge özetinde birleştir:
+- baslik: belgenin konusu; ozet: 6-12 cümle; bolumler: tüm parçaların bölümleri sırayla (sayfa aralıklarını koru);
+- olasi_sorular: en önemli 5-10 soru.
+<parca_ozetleri>
+{ozetler}
+</parca_ozetleri>"""
+
+PAKET_PLAN = """Aşağıdaki belge özetlerinden, dersi kaçırmış bir öğrenciye baştan sona anlatılacak bir ders planı çıkar.
+Belgelerin sırasını izle; her bölüm 3-8 dakikalık bir anlatım olsun, bölüm sayısı 3 ile 15 arası.
+Her bölümün pages alanına ilgili sayfaları 'belge adı s.N' biçiminde yaz.
+{ozetler}"""
+
+PAKET_REHBER = """Bu ders için bir SINAV REHBERİ yaz: öğrenci sınava nasıl hazırlanmalı?
+Hocanın sınav formatı: {format}
+Kısa maddeler halinde yaz (her satır '- ' ile başlasın, toplam 10-25 madde):
+- sınavda en çok çıkması beklenen konular ve kavramlar (belge adı ve sayfasıyla),
+- ezberlenmesi gereken tanımlar, sayılı listeler ("5 ilke", "4 aşama" gibi) ve karşılaştırmalar,
+- bu formattaki her soru türü için nasıl çalışılacağı ve sık yapılan hatalar.
+Belge özetleri:
+{ozetler}"""
+
+PAKET_KONU = """'{belge}' belgesi için SINAV ODAKLI KONU ANLATIMI yaz (markdown).
+- Konuları notlardaki sırayla '### Başlık' alt başlıklarıyla anlat (belge başlığını sen yazma).
+- Her konuda: tanımlar (notlardaki ifadeyle, terim **kalın**), sayılı listelerin TÜM maddeleri eksiksiz ve numaralı (kaç madde olduğunu da söyle), kısa örnekler.
+- Her konunun sonunda '**Sınavda nasıl sorulabilir:**' satırı ve altında 1-3 soru kalıbı.
+- Notlarda olmayan bilgi ekleme; sayfa atıflarını (s.N) koru.
+{parca}
+Hocanın sınav formatı: {format}
+Belge özeti: {ozet}
+<notlar>
+{metin}
+</notlar>"""
+
+PAKET_KISA_OZET = """KISA SINAV ÖZETİ yaz (markdown, en fazla {kelime} kelime): sınavdan önceki son saatte okunacak.
+- Belge belge '## Başlık'; altında en önemli tanımlar, sayılı listeler (maddeler eksiksiz ama kısa) ve karşılaştırmalar madde madde.
+{klasik}
+Hocanın sınav formatı: {format}
+Belge özetleri:
+{ozetler}"""
+
+PAKET_KLASIK = (
+    "- En sona '## Klasik soru şablonu' bölümü ekle: açıklama/klasik sorulardan tam puan alacak cevabın iskeleti "
+    "(tanım → maddeler/aşamalar → örnek → sonuç) ve bu dersten 2-3 örnek soru."
+)
+
+PAKET_DENEME = """{i}. DENEME SINAVINI hazırla (toplam {n} deneme). Hocanın sınav formatı:
+{format}
+Kurallar:
+- Bölümleri ve her bölümdeki soru sayısını bu formata göre belirle; formatta sayı yoksa gerçek bir vize/final kadar soru koy.
+- Bölüm türü (tur): "dy" doğru/yanlış, "coktan" çoktan seçmeli, "metin" bir metin verilip ona dayalı sorular, "klasik" açıklama/yorum, "kisa" kısa cevap, "bonus" bonus soru.
+- dy: soru = ifade, cevap = "D" ya da "Y"; ifadelerin yaklaşık yarısı yanlış olsun (notlardaki bir ayrıntı bozularak).
+- coktan: siklar = 4-5 şık METNİ (başına harf koyma), cevap = doğru şıkkın harfi ("A".."E"); çeldiriciler notlardaki benzer kavramlardan olsun, tek doğru şık olsun.
+- metin: bölümün 'metin' alanına notlardan 80-200 kelimelik bir metin koy, sorular o metne dayansın.
+- klasik/kisa/bonus: ornek_cevap tam puanlık cevap olsun; klasikte puanlama yaz (hangi madde kaç puan).
+- Her sorunun aciklama alanına doğru cevabın gerekçesini, kaynak alanına 'belge adı s.N' yaz. Kullanılmayan alanları boş bırak.
+- Yalnızca notlardaki bilgilerden sor.
+{parca}
+{onceki}
+Belge özetleri:
+{ozetler}
+<ders_notlari>
+{notlar}
+</ders_notlari>"""
+
+PAKET_DENEME_PARCA = """- BU ÇAĞRIDA YALNIZCA ŞU BÖLÜMÜ YAZ (deneme çok uzun olduğu için bölüm bölüm hazırlanıyor): "{baslik}" (tur: "{tur}"), bu bölümün {aralik}.
+  bolumler listesinde tek bir bölüm olsun; başka bölüm yazma. Bölüm yönergesi: {yonerge}"""
+
+PAKET_YAPI = """Hocanın sınav formatından deneme sınavının bölümlerini çıkar (sırayla). Hocanın sınav formatı:
+{format}
+Her bölüm için: baslik, tur ("dy" doğru/yanlış, "coktan" çoktan seçmeli, "metin" metne dayalı sorular, "klasik" açıklama/yorum,
+"kisa" kısa cevap, "bonus" bonus), soru_sayisi (formatta yazan sayı; yazmıyorsa gerçek bir vize/final kadar) ve kısa yonerge."""
+
+PAKET_DENETIM = """Aşağıdaki deneme sınavını DENETLE ve düzeltilmiş halini aynı şemayla geri ver.
+Her soruyu ders notlarıyla karşılaştır:
+- Cevap anahtarı notlara göre doğru mu? D/Y ifadesinin cevabı gerçekten doğru mu? Çoktan seçmelide tek ve doğru bir şık var mı, çeldiriciler kesinlikle yanlış mı?
+- Açıklama ve kaynak (belge adı s.N) doğru mu? Örnek cevaplar notlarla uyumlu mu?
+- Belirsiz, iki doğru cevaplı ya da notlarda dayanağı olmayan soruyu düzelt ya da notlara dayanan bir soruyla değiştir.
+Bölüm yapısını, soru sayılarını ve şık sırasını koru.
+<deneme>
+{deneme}
+</deneme>
+<ders_notlari>
+{notlar}
+</ders_notlari>"""

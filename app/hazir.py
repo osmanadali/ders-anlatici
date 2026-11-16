@@ -58,6 +58,11 @@ def apply_to_document(course_id: str, doc: dict, filename: str) -> bool:
     if not hit:
         return False
     pack, info = hit
+    with notes.course_lock(course_id):  # oku-değiştir-yaz: o arada başka bir yükleme/iş kaydederse ezilmesin
+        return _apply(course_id, doc, pack, info)
+
+
+def _apply(course_id: str, doc: dict, pack: dict, info: dict) -> bool:
     course = notes.get_course(course_id)
     d = notes.find_doc(course, doc["id"]) if course else None
     if not d:
@@ -70,16 +75,7 @@ def apply_to_document(course_id: str, doc: dict, filename: str) -> bool:
     d["hazir"] = {"paket": pack["_id"], "baslik": info.get("baslik", ""), "ozet": info.get("ozet", ""),
                   "bolumler": info.get("bolumler", []), "kavramlar": info.get("kavramlar", []),
                   "olasi_sorular": info.get("olasi_sorular", [])}
-    if pack.get("ders_plani") and not course.get("lecture_plan"):
-        course["lecture_plan"] = pack["ders_plani"] | {"hazir": True}
-    if pack.get("kavram_kagidi") and not course.get("formula_sheet"):
-        course["formula_sheet"] = pack["kavram_kagidi"] | {"created": time.time(), "focus": "", "hazir": True}
-    if pack.get("sinav_rehberi") and not course.get("sinav_rehberi"):
-        course["sinav_rehberi"] = pack["sinav_rehberi"]
-    for k in ("denemeler", "konu_anlatimi", "kisa_ozet"):
-        if pack.get(k):
-            course[k] = pack[k]
-    course["hazir_paket"] = pack["_id"]
+    _course_fields(course, pack)
     notes.save_course(course)
     return True
 
@@ -121,22 +117,25 @@ def course_for_pack(pack: dict, create: bool = True) -> str | None:
     return notes.create_course(pack.get("ders") or pack.get("kurs_kodu") or "Yeni ders")["id"]
 
 
-def _apply_course_level(course_id: str, pack: dict) -> None:
-    """PDF'ler henüz yüklenmemiş olsa da dersin plan, kavram kâğıdı, rehber, konu anlatımı, özet ve denemeleri gelir."""
-    course = notes.get_course(course_id)
-    if not course:
-        return
+def _course_fields(course: dict, pack: dict) -> None:
+    """Paketin ders düzeyi içeriği. Uygulamanın kendi ürettiği denemeler (uretilen) korunur."""
     if pack.get("ders_plani") and not course.get("lecture_plan"):
         course["lecture_plan"] = pack["ders_plani"] | {"hazir": True}
     if pack.get("kavram_kagidi") and not course.get("formula_sheet"):
         course["formula_sheet"] = pack["kavram_kagidi"] | {"created": time.time(), "focus": "", "hazir": True}
     if pack.get("sinav_rehberi") and not course.get("sinav_rehberi"):
         course["sinav_rehberi"] = pack["sinav_rehberi"]
-    for k in ("denemeler", "konu_anlatimi", "kisa_ozet"):
+    for k in ("konu_anlatimi", "kisa_ozet"):
         if pack.get(k):
             course[k] = pack[k]
+    if pack.get("denemeler"):
+        course["denemeler"] = list(pack["denemeler"]) + [x for x in course.get("denemeler") or [] if x.get("uretilen")]
     course["hazir_paket"] = pack["_id"]
-    notes.save_course(course)
+
+
+def _apply_course_level(course_id: str, pack: dict) -> None:
+    """PDF'ler henüz yüklenmemiş olsa da dersin plan, kavram kâğıdı, rehber, konu anlatımı, özet ve denemeleri gelir."""
+    notes.update_course(course_id, lambda c: _course_fields(c, pack))
 
 
 def _installed_index() -> dict:

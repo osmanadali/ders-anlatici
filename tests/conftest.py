@@ -5,6 +5,7 @@ from pathlib import Path
 
 # Testler gerçek veri klasörüne dokunmasın, API anahtarı gerekmesin.
 os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="ders_test_")
+os.environ["DERS_SESSIZ_SURE"] = "0"  # testlerde arka plan işleri ön planı beklemesin
 os.environ["DERS_YEREL_INDIRME"] = "0"  # testlerde yerel yapay zeka programı/modeli indirilmez
 os.environ.pop("GEMINI_API_KEY", None)
 os.environ.pop("GOOGLE_API_KEY", None)
