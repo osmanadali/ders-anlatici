@@ -276,6 +276,7 @@ export function mount({ root, board, teacher2d, onError }) {
 
   // ---------------- döngü
   const clock = new THREE.Clock();
+  let camDist = 3.6;  // pencerenin en-boy oranına göre: tahta + hoca tam sığacak kadar yakın
   const camPos = camera.position.clone(), camLook = new THREE.Vector3(0.2, 1.4, 0);
   let running = true;
   function frame() {
@@ -346,15 +347,15 @@ export function mount({ root, board, teacher2d, onError }) {
     let wantPos, wantLook;
     if (pen) {
       // Kamera yazılan noktanın SOLUNDAN bakar: hoca (yazının sağında durur) yazıyı kapatmaz
-      wantPos = new THREE.Vector3(pen.x - 0.5, 1.7, 3.5);
+      wantPos = new THREE.Vector3(pen.x - 0.5, 1.7, Math.max(3.3, camDist - 0.15));
       wantLook = new THREE.Vector3(pen.x + 0.05, lerp(1.5, pen.y, 0.4), 0);
     } else if (S.approach && st === "talking") {
-      wantPos = new THREE.Vector3(pos.x * 0.4 + 0.2, 1.62, 3.8);
+      wantPos = new THREE.Vector3(pos.x * 0.4 + 0.15, 1.62, camDist + 0.2);
       wantLook = new THREE.Vector3(pos.x * 0.6, lerp(1.4, head.y, 0.5), pos.z * 0.6);
     } else {
       // tahta ekranı doldursun (yakın kadraj), hoca sağda görünür kalsın
-      wantPos = new THREE.Vector3(0.25, 1.6, 3.6);
-      wantLook = new THREE.Vector3(0.2, 1.5, 0);
+      wantPos = new THREE.Vector3(0.3, 1.6, camDist);
+      wantLook = new THREE.Vector3(0.28, 1.5, 0);
     }
     wantPos.x += Math.sin(t * 0.31) * 0.05; wantPos.y += Math.sin(t * 0.43) * 0.025;  // elde tutulmuş hafif salınım
     camPos.lerp(wantPos, 1 - Math.exp(-1.6 * dt));
@@ -374,6 +375,9 @@ export function mount({ root, board, teacher2d, onError }) {
     // dar ekranda (telefon) biraz geri çekil ki tahta sığsın
     camera.fov = w / h < 1.1 ? 58 : 38;
     camera.updateProjectionMatrix();
+    // tahta (x≈-1.9) ile hoca (x≈1.9) arasını sığdıracak en yakın uzaklık
+    const yarim = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect;
+    camDist = THREE.MathUtils.clamp(2.25 / yarim, 3.3, 5.4);
     gl.setSize(w, h); css.setSize(w, h);
   }
   new ResizeObserver(resize).observe(root);
