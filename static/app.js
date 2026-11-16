@@ -813,8 +813,8 @@
     $("#setTtsModel").value = st.tts_model;
     $("#setLevel").value = st.level;
     $("#setEffort").value = st.effort;
-    $("#setProvider").value = st.tts_provider || "elevenlabs";
-    $("#setStt").value = st.stt_provider || "elevenlabs";
+    $("#setProvider").value = st.tts_provider || "edge";
+    $("#setStt").value = st.stt_provider || "whisper";
     $(".settings").dataset.prov = $("#setProvider").value;
     api("/api/voice-options").then((o) => {
       $("#setEdgeVoice").innerHTML = Object.entries(o.edge).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
@@ -858,7 +858,9 @@
     fd.append("file", blob, name);
     try {
       const r = await api("/api/voice-sample", { method: "POST", body: fd });
-      $("#sampleStatus").textContent = `✔ ${r.seconds} sn ses örneği kaydedildi`;
+      $("#sampleStatus").textContent = `✔ ${r.seconds} sn ses örneği kaydedildi, hoca artık senin sesinle konuşacak`;
+      $("#setProvider").value = "xtts"; $(".settings").dataset.prov = "xtts";
+      S.settings = await api("/api/settings");
     } catch (e) { $("#sampleStatus").textContent = "Hata: " + e.message; }
   }
   $("#sampleFile").onchange = (e) => { const f = e.target.files[0]; if (f) uploadSample(f, f.name); e.target.value = ""; };

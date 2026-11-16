@@ -81,7 +81,8 @@ async def voice_sample(file: UploadFile = File(...)):
         sec = await asyncio.to_thread(voice.save_voice_sample, await file.read(), file.filename or "")
     except voice.VoiceError as e:
         raise HTTPException(400, str(e))
-    return {"seconds": round(sec, 1)}
+    save_settings({"tts_provider": "xtts"})  # kendi sesin hazır: ücretsiz yerel klona geç
+    return {"seconds": round(sec, 1), "tts_provider": "xtts"}
 
 
 @app.get("/api/voices")

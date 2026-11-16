@@ -4,7 +4,7 @@ Sağlayıcılar (Ayarlar'dan seçilir):
   TTS  elevenlabs : klon ses, en doğal (ücretli kredi)
        edge       : Microsoft Edge nöral sesleri (Emel, Ahmet) — ÜCRETSİZ, internet gerekir
        xtts       : XTTS-v2 ile kendi bilgisayarında SES KLONU — ÜCRETSİZ, 10-30 sn ses örneği ister
-                    (pip install -r requirements-ucretsiz.txt + coqui-tts; ekran kartı önerilir)
+                    (pip install -r requirements-klon.txt; ekran kartı önerilir)
        browser    : tarayıcının kendi sesi (sunucu ses üretmez)
   STT  elevenlabs : Scribe (ücretli)
        whisper    : faster-whisper, kendi bilgisayarında — ÜCRETSİZ
@@ -36,7 +36,7 @@ def _http() -> httpx.AsyncClient:
 
 def _headers() -> dict:
     if not ELEVENLABS_API_KEY:
-        raise VoiceError("ELEVENLABS_API_KEY tanımlı değil (.env dosyasına ekleyin).")
+        raise VoiceError("ElevenLabs seçili ama anahtarı yok. Ayarlar'dan ücretsiz bir ses kaynağı seç ya da .env'e ELEVENLABS_API_KEY ekle.")
     return {"xi-api-key": ELEVENLABS_API_KEY}
 
 
@@ -165,7 +165,7 @@ async def _edge_tts(text: str, voice_name: str) -> bytes:
         import aiohttp
         import edge_tts
     except ImportError as e:
-        raise VoiceError("Ücretsiz ses için: pip install -r requirements-ucretsiz.txt") from e
+        raise VoiceError("Ücretsiz ses paketi eksik: pip install -r requirements.txt") from e
     # Kurumsal ağ/vekil sunucu arkasında da çalışsın diye sistemin CA dosyasını kullan.
     ca = os.getenv("SSL_CERT_FILE")
     connector = aiohttp.TCPConnector(ssl=ssl.create_default_context(cafile=ca)) if ca else None
@@ -199,7 +199,7 @@ def _xtts(text: str) -> bytes:
         import numpy as np
         from TTS.api import TTS
     except ImportError as e:
-        raise VoiceError("Yerel klon için: pip install coqui-tts (ayrıntı README'de)") from e
+        raise VoiceError("Yerel klon için: pip install -r requirements-klon.txt") from e
     with _xtts_lock:  # model aynı anda tek iş yapar
         if _xtts_model is None:
             os.environ.setdefault("COQUI_TOS_AGREED", "1")  # kişisel/ticari olmayan kullanım lisansı
@@ -230,7 +230,7 @@ def save_voice_sample(data: bytes, filename: str) -> float:
         import av
         import numpy as np
     except ImportError as e:
-        raise VoiceError("Ses örneğini dönüştürmek için: pip install -r requirements-ucretsiz.txt") from e
+        raise VoiceError("Ses paketi eksik: pip install -r requirements.txt") from e
     try:
         container = av.open(io.BytesIO(data))
         resampler = av.AudioResampler(format="s16", layout="mono", rate=22050)
@@ -266,7 +266,7 @@ def _whisper(audio: bytes, filename: str = "", long_form: bool = False) -> str:
     try:
         from faster_whisper import WhisperModel
     except ImportError as e:
-        raise VoiceError("Ücretsiz konuşma tanıma için: pip install -r requirements-ucretsiz.txt") from e
+        raise VoiceError("Konuşma tanıma paketi eksik: pip install -r requirements.txt") from e
     import io
 
     size = load_settings().get("whisper_model", "large-v3-turbo")

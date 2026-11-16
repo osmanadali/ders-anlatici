@@ -30,9 +30,9 @@ DEFAULTS = {
     "effort": os.getenv("EFFORT", "medium"),
     "level": "normal",  # basit | normal | ileri
     "tts_enabled": True,  # eski ayar; tts_provider="browser" ile aynı anlamda
-    "tts_provider": os.getenv("TTS_PROVIDER", "elevenlabs"),  # elevenlabs | edge | xtts | browser
+    "tts_provider": os.getenv("TTS_PROVIDER", "edge"),  # edge (ücretsiz) | xtts (ücretsiz klon) | browser | elevenlabs (ücretli, isteğe bağlı)
     "edge_voice": "tr-TR-EmelNeural",
-    "stt_provider": os.getenv("STT_PROVIDER", "elevenlabs"),  # elevenlabs | whisper
+    "stt_provider": os.getenv("STT_PROVIDER", "whisper"),  # whisper (ücretsiz) | elevenlabs (ücretli, isteğe bağlı)
     "whisper_model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),  # small = hızlı, large-v3-turbo = isabetli
     "web_search": False,  # hoca gerektiğinde internette arama yapabilsin
 }
