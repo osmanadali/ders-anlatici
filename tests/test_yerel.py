@@ -137,3 +137,16 @@ def test_indirme_kapaliysa_anlasilir_hata(monkeypatch, tmp_path):
     with pytest.raises(llm.TutorError) as e:
         asyncio.run(llm._parse(llm.PageText, "x"))
     assert "Yerel yapay zeka" in str(e.value)
+
+
+def test_edge_ulasilamazsa_internetsiz_ses(monkeypatch):
+    from app import voice
+
+    async def edge_yok(text, v):
+        raise voice.VoiceError("ağ yok")
+
+    monkeypatch.setattr(voice, "_edge_tts", edge_yok)
+    monkeypatch.setattr(voice, "piper_available", lambda: True)
+    monkeypatch.setattr(voice, "_piper", lambda text: b"RIFF-piper")
+    config.save_settings({"tts_provider": "edge"})
+    assert asyncio.run(voice.real_speak("Merhaba")) == b"RIFF-piper"

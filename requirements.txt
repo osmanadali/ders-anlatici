@@ -11,6 +11,7 @@ pydantic>=2.7
 pytest>=8.0
 # Ücretsiz ses: Microsoft Edge sesleri + bilgisayarında çalışan konuşma tanıma (Whisper)
 edge-tts>=7.0
+piper-tts>=1.8          # internetsiz Türkçe ses (Edge'e ulaşılamazsa)
 aiohttp>=3.9
 faster-whisper>=1.1
 av>=11,<16             # faster-whisper 1.2 ile uyumlu sürüm

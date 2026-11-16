@@ -136,6 +136,8 @@ def install():
     main.llm.stream_steps = fake_stream_steps
     voice.synthesize = fake_synthesize
     voice.transcribe = fake_transcribe
+    if not hasattr(voice, "real_speak"):
+        voice.real_speak = voice.speak  # internetsiz ses yedeği testi için gerçeği sakla
     voice.speak = fake_speak
     voice.listen = fake_transcribe
     voice.transcribe_long = fake_transcribe_long

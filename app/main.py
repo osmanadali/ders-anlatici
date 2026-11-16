@@ -150,6 +150,10 @@ async def _warm_up():
         import threading
 
         threading.Thread(target=voice.warm_whisper, daemon=True).start()
+    if os.getenv("DERS_ON_YUKLEME", "1") != "0":
+        import threading as _th
+
+        _th.Thread(target=voice.warm_piper, daemon=True).start()  # internet kesilirse ses sürsün
     # Yerel yapay zeka: ilk açılışta programı ve modeli indirir, sonraki açılışlarda yalnızca başlatır.
     if os.getenv("DERS_ON_YUKLEME", "1") != "0" and load_settings().get("llm_provider") != "gemini":
         yerel.baslat_arka_planda()

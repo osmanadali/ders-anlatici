@@ -5,6 +5,8 @@ Sağlayıcılar (Ayarlar'dan seçilir):
        edge       : Microsoft Edge nöral sesleri (Emel, Ahmet) — ÜCRETSİZ, internet gerekir
        xtts       : XTTS-v2 ile kendi bilgisayarında SES KLONU — ÜCRETSİZ, 10-30 sn ses örneği ister
                     (pip install -r requirements-klon.txt; ekran kartı önerilir)
+       piper      : Piper (tr_TR-dfki), tamamen bilgisayarda — ÜCRETSİZ, İNTERNETSİZ; Edge'e erişilemezse
+                    kendiliğinden devreye girer (ilk kullanımda ses modeli ~63 MB bir kez indirilir)
        browser    : tarayıcının kendi sesi (sunucu ses üretmez)
   STT  elevenlabs : Scribe (ücretli)
        whisper    : faster-whisper, kendi bilgisayarında — ÜCRETSİZ
@@ -12,11 +14,13 @@ Sağlayıcılar (Ayarlar'dan seçilir):
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import httpx
 
 from .config import elevenlabs_key
 
+log = logging.getLogger("ders.ses")
 API = "https://api.elevenlabs.io/v1"
 # Aynı anda en fazla bu kadar ses üretimi (ElevenLabs eşzamanlılık sınırı için).
 _tts_sem = asyncio.Semaphore(3)
@@ -144,7 +148,15 @@ async def speak(text: str, previous_text: str = "", next_text: str = "") -> byte
     s = load_settings()
     provider = s.get("tts_provider", "elevenlabs")
     if provider == "edge":
-        return await _edge_tts(text, s.get("edge_voice", "tr-TR-EmelNeural"))
+        try:
+            return await _edge_tts(text, s.get("edge_voice", "tr-TR-EmelNeural"))
+        except VoiceError as e:
+            if not piper_available():
+                raise
+            log.warning("Edge sesine ulaşılamadı (%s); internetsiz ses (Piper) kullanılıyor", e)
+            return await asyncio.to_thread(_piper, text)
+    if provider == "piper":
+        return await asyncio.to_thread(_piper, text)
     if provider == "xtts":
         return await asyncio.to_thread(_xtts, text)
     if provider == "browser":
@@ -181,6 +193,74 @@ async def _edge_tts(text: str, voice_name: str) -> bytes:
     if not out:
         raise VoiceError("Edge sesi boş döndü.")
     return bytes(out)
+
+
+# ---------------------------------------------------------------- Piper (internetsiz, bilgisayarda)
+PIPER_VOICE = "tr_TR-dfki-medium"
+PIPER_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main/tr/tr_TR/dfki/medium/"
+_piper_voice = None
+_piper_lock = threading.Lock()
+
+
+def _piper_dir() -> Path:
+    return DATA_DIR / "piper"
+
+
+def piper_available() -> bool:
+    try:
+        import piper  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _piper_download() -> Path:
+    d = _piper_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    model = d / f"{PIPER_VOICE}.onnx"
+    for name in (f"{PIPER_VOICE}.onnx.json", f"{PIPER_VOICE}.onnx"):
+        dst = d / name
+        if dst.exists() and dst.stat().st_size > 0:
+            continue
+        tmp = dst.with_name(dst.name + ".part")
+        with httpx.stream("GET", PIPER_URL + name, follow_redirects=True, timeout=httpx.Timeout(30, read=300)) as r:
+            r.raise_for_status()
+            with open(tmp, "wb") as f:
+                for chunk in r.iter_bytes(1 << 20):
+                    f.write(chunk)
+        os.replace(tmp, dst)
+    return model
+
+
+def _piper(text: str) -> bytes:
+    global _piper_voice
+    import io
+    import wave
+
+    try:
+        from piper import PiperVoice
+    except ImportError as e:
+        raise VoiceError("İnternetsiz ses paketi eksik: pip install -r requirements.txt") from e
+    with _piper_lock:
+        if _piper_voice is None:
+            try:
+                _piper_voice = PiperVoice.load(str(_piper_download()))
+            except Exception as e:
+                raise VoiceError(f"İnternetsiz ses modeli yüklenemedi: {e}") from e
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            _piper_voice.synthesize_wav(text, w)
+    return buf.getvalue()
+
+
+def warm_piper() -> None:
+    """Açılışta ses modelini indirir (internet varken), böylece internet kesilince hazır olur."""
+    if not piper_available():
+        return
+    try:
+        _piper_download()
+    except Exception as e:
+        log.warning("Piper ses modeli indirilemedi: %s", e)
 
 
 # ---------------------------------------------------------------- XTTS-v2 (ücretsiz yerel klon)
