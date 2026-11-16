@@ -75,7 +75,7 @@ def apply_to_document(course_id: str, doc: dict, filename: str) -> bool:
         course["formula_sheet"] = pack["kavram_kagidi"] | {"created": time.time(), "focus": "", "hazir": True}
     if pack.get("sinav_rehberi") and not course.get("sinav_rehberi"):
         course["sinav_rehberi"] = pack["sinav_rehberi"]
-    for k in ("denemeler", "konu_anlatimi"):
+    for k in ("denemeler", "konu_anlatimi", "kisa_ozet"):
         if pack.get(k):
             course[k] = pack[k]
     notes.save_course(course)

@@ -283,3 +283,6 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .deneme .metin { margin: 6px 0; padding: 10px 14px; border-left: 4px solid var(--accent); background: var(--panel); border-radius: 6px; line-height: 1.6; }
 .konu-md { line-height: 1.6; max-height: 60vh; overflow: auto; }
 .konu-md h3, .konu-md h4, .konu-md h5 { margin: 14px 0 4px; }
+.md-table { border-collapse: collapse; margin: 8px 0; font-size: .92em; width: 100%; display: block; overflow-x: auto; }
+.md-table th, .md-table td { border: 1px solid var(--border, #c9d3cd); padding: 4px 8px; text-align: left; vertical-align: top; }
+.md-table th { background: var(--panel); }

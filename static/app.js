@@ -573,7 +573,13 @@
     for (const raw of String(md || "").split("\n")) {
       const line = raw.trimEnd();
       let m;
-      if ((m = line.match(/^(#{1,4})\s+(.*)/))) { close(); const n = Math.min(6, m[1].length + 2); html += `<h${n}>${inl(m[2])}</h${n}>`; }
+      if (/^\s*\|.*\|\s*$/.test(line)) {  // tablo satırı
+        const cells = line.trim().slice(1, -1).split("|").map((c) => c.trim());
+        if (cells.every((c) => /^:?-{2,}:?$/.test(c))) continue;  // ayraç satırı
+        if (list !== "table") { close(); html += '<table class="md-table">'; list = "table"; html += "<tr>" + cells.map((c) => `<th>${inl(c)}</th>`).join("") + "</tr>"; }
+        else html += "<tr>" + cells.map((c) => `<td>${inl(c)}</td>`).join("") + "</tr>";
+      }
+      else if ((m = line.match(/^(#{1,4})\s+(.*)/))) { close(); const n = Math.min(6, m[1].length + 2); html += `<h${n}>${inl(m[2])}</h${n}>`; }
       else if ((m = line.match(/^\s*[-*•]\s+(.*)/))) { if (list !== "ul") { close(); html += "<ul>"; list = "ul"; } html += `<li>${inl(m[1])}</li>`; }
       else if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== "ol") { close(); html += "<ol>"; list = "ol"; } html += `<li>${inl(m[1])}</li>`; }
       else if (!line.trim()) close();
@@ -583,7 +589,9 @@
     return html;
   }
   function renderDenemeler() {
-    const kb = $("#konuBox"), db = $("#denemeBox"), ex = S.course?.denemeler || [];
+    const kb = $("#konuBox"), db = $("#denemeBox"), ob = $("#ozetBox"), ex = S.course?.denemeler || [];
+    ob.classList.toggle("hidden", !S.course?.kisa_ozet);
+    if (S.course?.kisa_ozet) ob.querySelector("div").innerHTML = mdLite(S.course.kisa_ozet);
     if (S.course?.konu_anlatimi) {
       kb.classList.remove("hidden");
       kb.querySelector("div").innerHTML = mdLite(S.course.konu_anlatimi);

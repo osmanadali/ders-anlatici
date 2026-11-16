@@ -75,13 +75,13 @@ def test_paket_sonradan_yuklenince_var_olan_notlara_uygulanir(tmp_path, monkeypa
     c.post(f"/api/courses/{cid}/docs", files={"file": ("4.DERS (TKY'NİN TEMEL ILKELERI).pdf", pdf, "application/pdf")})
     assert c.post("/api/hazir", files={"file": ("x.json", b"{bozuk", "application/json")}).status_code == 400
     deneme = {"baslik": "Deneme 1", "bolum1_dy": [{"ifade": "5M'de Machine vardır.", "cevap": "D", "aciklama": "", "kaynak": ""}]}
-    pack = {"kurs_kodu": "ENM 463", "ders": "Kalite", "konu_anlatimi": "## TKY\n- **Müşteri odaklılık**",
+    pack = {"kurs_kodu": "ENM 463", "ders": "Kalite", "konu_anlatimi": "## TKY\n- **Müşteri odaklılık**", "kisa_ozet": "# Özet",
             "denemeler": [deneme], "docs": {"4.DERS (TKY'NIN TEMEL ILKELERI).pdf": {"ocr": {"2": "TKY ilkeleri: Kaizen"}}}}
     r = c.post("/api/hazir", files={"file": ("enm463.json", json.dumps(pack).encode(), "application/json")}).json()
     assert r["uygulanan"] == 1 and r["dersler"] == [cid]
     assert (tmp_path / "kullanici" / "enm463.json").exists()
     course = c.get(f"/api/courses/{cid}").json()
-    assert course["denemeler"][0]["baslik"] == "Deneme 1" and "TKY" in course["konu_anlatimi"]
+    assert course["denemeler"][0]["baslik"] == "Deneme 1" and "TKY" in course["konu_anlatimi"] and course["kisa_ozet"] == "# Özet"
     assert "Kaizen" in course["docs"][0]["pages"][1]["text"]
     assert c.get("/api/hazir").json()[-1]["deneme"] == 1
     hazir.packs.cache_clear()
