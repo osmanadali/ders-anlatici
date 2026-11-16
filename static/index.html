@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ders Anlatıcı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.2/math.min.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">✎ Ders Anlatıcı</div>
+  <select id="courseSelect" title="Ders"></select>
+  <button id="newCourseBtn" class="ghost" title="Yeni ders">+ Ders</button>
+  <div class="spacer"></div>
+  <button id="newSessionBtn" class="ghost" title="Yeni anlatım başlat">Yeni anlatım</button>
+  <button id="settingsBtn" class="ghost" title="Ayarlar">⚙ Ayarlar</button>
+</header>
+
+<main class="layout">
+  <section class="board-wrap">
+    <div id="board" class="board" aria-live="polite"></div>
+    <div class="board-bar">
+      <button id="playBtn" class="round" title="Duraklat / devam (P)">⏸</button>
+      <button id="stopBtn" class="round" title="Anlatımı durdur">⏹</button>
+      <label class="speed">Hız
+        <select id="speedSelect">
+          <option value="0.8">0.8×</option><option value="0.9">0.9×</option>
+          <option value="1" selected>1×</option><option value="1.15">1.15×</option>
+          <option value="1.3">1.3×</option><option value="1.5">1.5×</option>
+        </select>
+      </label>
+      <div id="caption" class="caption"></div>
+      <span id="pageInfo" class="page-info"></span>
+      <button id="prevPageBtn" class="ghost small" title="Önceki tahta sayfası">◀</button>
+      <button id="nextPageBtn" class="ghost small" title="Sonraki tahta sayfası">▶</button>
+      <button id="exportBtn" class="ghost small" title="Tahtayı PDF olarak indir">PDF</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <nav class="tabs">
+      <button data-tab="chat" class="active">Sohbet</button>
+      <button data-tab="notes">Notlar</button>
+      <button data-tab="lecture">Ders anlat</button>
+      <button data-tab="quiz">Sınav</button>
+      <button data-tab="records">Kayıtlar</button>
+    </nav>
+
+    <!-- SOHBET -->
+    <div class="tab-panel active" id="tab-chat">
+      <div id="chatLog" class="chat-log">
+        <div class="hint">
+          Soru yaz, ekran görüntüsü yapıştır (Ctrl+V) ya da 🎤 ile sesli sor.<br>
+          “12. sayfayı anlat” dersen notlarından anlatırım. Anlatırken 🎤'a basarak sözümü kesebilirsin.
+        </div>
+      </div>
+      <div id="attachRow" class="attach-row"></div>
+      <form id="askForm" class="ask-form">
+        <label class="icon-btn" title="Dosya / fotoğraf ekle">📎
+          <input id="fileInput" type="file" accept="image/*,application/pdf" multiple hidden>
+        </label>
+        <textarea id="askInput" rows="2" placeholder="Sorunu yaz… (Enter gönderir, Shift+Enter alt satır)"></textarea>
+        <button id="micBtn" type="button" class="icon-btn" title="Sesli soru (basılı tut ya da tıkla)">🎤</button>
+        <button type="submit" class="primary">Sor</button>
+      </form>
+    </div>
+
+    <!-- NOTLAR -->
+    <div class="tab-panel" id="tab-notes">
+      <div class="row">
+        <label class="primary file-label">Not yükle (PDF / fotoğraf)
+          <input id="docInput" type="file" accept="application/pdf,image/*" multiple hidden>
+        </label>
+        <span id="uploadStatus" class="muted"></span>
+      </div>
+      <ul id="docList" class="doc-list"></ul>
+      <div id="pageViewer" class="page-viewer hidden">
+        <div class="row">
+          <button id="pvPrev" class="ghost small">◀</button>
+          <span id="pvLabel"></span>
+          <button id="pvNext" class="ghost small">▶</button>
+          <div class="spacer"></div>
+          <button id="pvAsk" class="ghost small" title="Sonraki soruna bu sayfayı ekle">Soruya ekle</button>
+          <button id="pvExplain" class="primary small">Bu sayfayı anlat</button>
+        </div>
+        <img id="pvImg" alt="Not sayfası">
+      </div>
+    </div>
+
+    <!-- DERS ANLAT -->
+    <div class="tab-panel" id="tab-lecture">
+      <p class="muted">Kaçırdığın dersi notlarından baştan sona, bölüm bölüm anlatır.</p>
+      <div class="row">
+        <button id="planBtn" class="primary">Ders planı çıkar</button>
+        <label class="check"><input id="autoNext" type="checkbox" checked> Bölümler arası otomatik geç</label>
+      </div>
+      <div id="planStatus" class="muted"></div>
+      <ol id="planList" class="plan-list"></ol>
+    </div>
+
+    <!-- SINAV -->
+    <div class="tab-panel" id="tab-quiz">
+      <div class="quiz-setup">
+        <label>Soru sayısı <input id="qCount" type="number" min="1" max="20" value="5"></label>
+        <label>Zorluk
+          <select id="qDiff"><option>kolay</option><option selected>orta</option><option>zor (final ayarı)</option></select>
+        </label>
+        <label class="grow">Konu (boş = tüm notlar) <input id="qTopic" type="text" placeholder="ör. türev uygulamaları"></label>
+        <button id="quizBtn" class="primary">Sınav hazırla</button>
+      </div>
+      <div id="quizArea"></div>
+      <h4>Zayıf konuların</h4>
+      <ul id="weakList" class="weak-list"><li class="muted">Henüz kayıt yok.</li></ul>
+    </div>
+
+    <!-- KAYITLAR -->
+    <div class="tab-panel" id="tab-records">
+      <p class="muted">Her anlatım sesiyle birlikte kaydedilir. Tıklayıp baştan izleyebilir, kaldığın yerden soru sormaya devam edebilirsin.</p>
+      <ul id="recordList" class="record-list"></ul>
+    </div>
+  </aside>
+</main>
+
+<dialog id="settingsDlg">
+  <form method="dialog" class="settings">
+    <h3>Ayarlar</h3>
+    <label>Anlatıcı sesi <select id="setVoice"></select></label>
+    <button type="button" id="previewVoice" class="ghost small">Sesi dinle</button>
+    <label>Ses modeli
+      <select id="setTtsModel">
+        <option value="eleven_multilingual_v2">Multilingual v2 (en doğal)</option>
+        <option value="eleven_flash_v2_5">Flash v2.5 (en hızlı)</option>
+        <option value="eleven_turbo_v2_5">Turbo v2.5</option>
+      </select>
+    </label>
+    <label>Anlatım seviyesi
+      <select id="setLevel"><option value="basit">Basit (sıfırdan)</option><option value="normal">Normal</option><option value="ileri">İleri (hızlı tekrar)</option></select>
+    </label>
+    <label>Düşünme derinliği
+      <select id="setEffort"><option value="low">Hızlı</option><option value="medium">Dengeli</option><option value="high">Derin (zor sorular)</option></select>
+    </label>
+    <label class="check"><input id="setTts" type="checkbox"> Klon sesle konuş (kapalıysa tarayıcı sesi)</label>
+    <menu><button value="cancel" class="ghost">Kapat</button><button id="saveSettings" value="ok" class="primary">Kaydet</button></menu>
+  </form>
+</dialog>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/board.js"></script>
+<script src="/static/player.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

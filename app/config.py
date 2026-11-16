@@ -1,0 +1,54 @@
+"""Ayarlar: .env dosyası + arayüzden değiştirilebilen kalıcı ayarlar."""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env")
+
+DATA_DIR = Path(os.getenv("DATA_DIR", "veri"))
+if not DATA_DIR.is_absolute():
+    DATA_DIR = ROOT / DATA_DIR
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+
+# Notların tamamı bu karakter sınırının altındaysa hepsi modele verilir (önbellekli);
+# üstündeyse soruyla ilgili sayfalar seçilir.
+FULL_NOTES_CHAR_LIMIT = int(os.getenv("FULL_NOTES_CHAR_LIMIT", "600000"))
+
+DEFAULTS = {
+    "voice_id": os.getenv("VOICE_ID", "zu3iuxxlZoTwzmAUvpNF"),  # Osman Adalı (TR klon)
+    "voice_name": "Osman Adalı",
+    "tts_model": os.getenv("TTS_MODEL", "eleven_multilingual_v2"),
+    "claude_model": os.getenv("CLAUDE_MODEL", "claude-opus-5-5"),
+    "effort": os.getenv("EFFORT", "medium"),
+    "level": "normal",  # basit | normal | ileri
+    "tts_enabled": True,
+}
+
+_SETTINGS_FILE = DATA_DIR / "ayarlar.json"
+
+
+def load_settings() -> dict:
+    s = dict(DEFAULTS)
+    if _SETTINGS_FILE.exists():
+        try:
+            s.update(json.loads(_SETTINGS_FILE.read_text("utf-8")))
+        except (OSError, json.JSONDecodeError):
+            pass
+    return s
+
+
+def save_settings(patch: dict) -> dict:
+    s = load_settings()
+    for k, v in patch.items():
+        if k in DEFAULTS:
+            s[k] = v
+    _SETTINGS_FILE.write_text(json.dumps(s, ensure_ascii=False, indent=2), "utf-8")
+    return s
