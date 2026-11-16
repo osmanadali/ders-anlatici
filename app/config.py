@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -15,13 +16,54 @@ if not DATA_DIR.is_absolute():
     DATA_DIR = ROOT / DATA_DIR
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 
 # Notların tamamı bu karakter sınırının altındaysa hepsi modele verilir (önbellekli);
 # üstündeyse soruyla ilgili sayfalar seçilir.
 FULL_NOTES_CHAR_LIMIT = int(os.getenv("FULL_NOTES_CHAR_LIMIT", "600000"))
+
+# ---------------------------------------------------------------- API anahtarları
+# Anahtarlar her kullanımda ortamdan okunur; Ayarlar'dan girilince yeniden başlatma gerekmez.
+KEY_NAMES = {"gemini": "GEMINI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY"}
+
+
+def anthropic_key() -> str:
+    return os.getenv("ANTHROPIC_API_KEY", "").strip()
+
+
+def gemini_key() -> str:
+    return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
+
+
+def elevenlabs_key() -> str:
+    return os.getenv("ELEVENLABS_API_KEY", "").strip()
+
+
+def save_keys(keys: dict) -> None:
+    """Anahtarları .env dosyasına yazar (diğer satırlara dokunmadan) ve hemen etkinleştirir."""
+    env = ROOT / ".env"
+    lines = env.read_text("utf-8").splitlines() if env.exists() else []
+    for short, value in keys.items():
+        name = KEY_NAMES.get(short)
+        if not name or value is None:
+            continue
+        value = str(value).strip().replace("\n", "")
+        line = f"{name}={value}"
+        for i, ln in enumerate(lines):
+            if re.match(rf"^\s*#?\s*{name}\s*=", ln):
+                lines[i] = line
+                break
+        else:
+            lines.append(line)
+        if value:
+            os.environ[name] = value
+        else:
+            os.environ.pop(name, None)
+    env.write_text("\n".join(lines) + "\n", "utf-8")
+    try:
+        os.chmod(env, 0o600)  # anahtarlar yalnızca kullanıcıya açık olsun
+    except OSError:
+        pass
+
 
 DEFAULTS = {
     "voice_id": os.getenv("VOICE_ID", "zu3iuxxlZoTwzmAUvpNF"),  # Osman Adalı (TR klon)

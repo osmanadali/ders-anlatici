@@ -12,7 +12,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -69,12 +69,40 @@ async def post_settings(patch: dict):
     return save_settings(patch)
 
 
+@app.get("/api/keys")
+async def keys_status():
+    """Hangi anahtarların girildiğini söyler (anahtarın kendisini asla göndermez)."""
+    from .config import anthropic_key, elevenlabs_key, gemini_key
+
+    def mask(k: str) -> str:
+        return (k[:4] + "…" + k[-4:]) if len(k) > 12 else ("girildi" if k else "")
+
+    return {"gemini": mask(gemini_key()), "anthropic": mask(anthropic_key()), "elevenlabs": mask(elevenlabs_key())}
+
+
+class KeysBody(BaseModel):
+    gemini: str | None = None
+    anthropic: str | None = None
+    elevenlabs: str | None = None
+
+
+@app.post("/api/keys")
+async def keys_save(body: KeysBody, request: Request):
+    # Anahtarlar yalnızca bilgisayarın kendisinden girilebilir (telefondan/tünelden değil).
+    if not auth.is_local(request):
+        raise HTTPException(403, "API anahtarları yalnızca bilgisayardan girilebilir.")
+    from .config import save_keys
+
+    save_keys({k: v for k, v in body.model_dump().items() if v is not None})
+    return await keys_status()
+
+
 @app.get("/api/llm-options")
 async def llm_options():
-    from .config import ANTHROPIC_API_KEY, GEMINI_API_KEY
+    from .config import anthropic_key, gemini_key
 
-    out = {"claude": bool(ANTHROPIC_API_KEY), "gemini": bool(GEMINI_API_KEY), "active": llm.provider(), "gemini_models": []}
-    if GEMINI_API_KEY:
+    out = {"claude": bool(anthropic_key()), "gemini": bool(gemini_key()), "active": llm.provider(), "gemini_models": []}
+    if gemini_key():
         try:
             out["gemini_models"] = await llm.llm_gemini.list_models()
         except llm.llm_gemini.GeminiError as e:

@@ -9,7 +9,7 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from . import llm_gemini, prompts
-from .config import ANTHROPIC_API_KEY, GEMINI_API_KEY, load_settings
+from .config import anthropic_key, gemini_key, load_settings
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 _client: anthropic.AsyncAnthropic | None = None
@@ -24,18 +24,18 @@ def provider() -> str:
     p = load_settings().get("llm_provider") or ""
     if p in ("claude", "gemini"):
         return p
-    return "gemini" if GEMINI_API_KEY and not ANTHROPIC_API_KEY else "claude"
+    return "gemini" if gemini_key() and not anthropic_key() else "claude"
 
 
 def _can_fallback_to_claude() -> bool:
-    return bool(ANTHROPIC_API_KEY) and load_settings().get("claude_fallback", True)
+    return bool(anthropic_key()) and load_settings().get("claude_fallback", True)
 
 
 def client() -> anthropic.AsyncAnthropic:
     global _client
     if _client is None:
         # Anahtar .env'de yoksa SDK ortam değişkenlerine / `ant auth login` profiline bakar.
-        _client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY or None)
+        _client = anthropic.AsyncAnthropic(api_key=anthropic_key() or None)
     return _client
 
 
@@ -226,7 +226,7 @@ async def _claude_stream_steps(system: list[dict], messages: list[dict]) -> Asyn
                     yield step
             final = await stream.get_final_message()
     except anthropic.AuthenticationError as e:
-        raise TutorError("Claude API anahtarı geçersiz ya da tanımlı değil (.env → ANTHROPIC_API_KEY).") from e
+        raise TutorError("Claude API anahtarı geçersiz ya da tanımlı değil (Ayarlar → API anahtarları).") from e
     except anthropic.RateLimitError as e:
         raise TutorError("Claude API hız sınırına takıldı, biraz sonra tekrar dene.") from e
     except anthropic.APIConnectionError as e:
@@ -301,7 +301,7 @@ async def _claude_parse(model_cls, content, system=None, effort=None, max_tokens
         ) as stream:
             resp = await stream.get_final_message()
     except anthropic.AuthenticationError as e:
-        raise TutorError("Claude API anahtarı geçersiz ya da tanımlı değil (.env → ANTHROPIC_API_KEY).") from e
+        raise TutorError("Claude API anahtarı geçersiz ya da tanımlı değil (Ayarlar → API anahtarları).") from e
     except anthropic.APIStatusError as e:
         raise TutorError(f"Claude API hatası ({e.status_code}): {e.message}") from e
     except anthropic.APIConnectionError as e:

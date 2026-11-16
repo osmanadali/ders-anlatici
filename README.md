@@ -36,9 +36,7 @@ pip install -r requirements.txt
 cp .env.example .env             # Windows: copy .env.example .env
 ```
 
-`.env` dosyasına tek bir anahtar yazman yeterli:
-
-- `ANTHROPIC_API_KEY`: https://console.anthropic.com → API Keys (hocanın beyni olan Claude için)
+**API anahtarı:** Uygulamayı ilk açtığında Ayarlar penceresi kendiliğinden açılır. **Gemini anahtarı** alanına ücretsiz anahtarını yapıştırıp Kaydet'e bas, o kadar. Anahtarı almak için https://aistudio.google.com/apikey → Google hesabınla gir → **Create API key** → çıkan `AIza…` ile başlayan metni kopyala. (Claude anahtarı isteğe bağlıdır, daha derin anlatım için.) Anahtarlar bilgisayarındaki `.env` dosyasına kaydedilir; istersen o dosyayı elle de düzenleyebilirsin.
 
 Ses ve konuşma tanıma **varsayılan olarak ücretsizdir**, anahtar istemez: hoca Microsoft Edge'in Türkçe sesiyle konuşur, sesli sorularını bilgisayarındaki Whisper yazıya çevirir (ilk sesli soruda ~1.6 GB model bir kez iner). Kendi sesini istiyorsan aşağıdaki **Ücretsiz ses** bölümüne bak.
 

@@ -859,6 +859,12 @@
     }).catch(() => {});
     $("#setWeb").checked = !!st.web_search;
     $("#set3d").checked = localGet("hoca3d") !== "0";
+    ["keyGemini", "keyAnthropic", "keyEleven"].forEach((id) => ($("#" + id).value = ""));
+    api("/api/keys").then((k) => {
+      $("#keyGemini").placeholder = k.gemini ? `kayıtlı: ${k.gemini}` : "AIza… ile başlar";
+      $("#keyAnthropic").placeholder = k.anthropic ? `kayıtlı: ${k.anthropic}` : "sk-ant-… ile başlar";
+      $("#keyEleven").placeholder = k.elevenlabs ? `kayıtlı: ${k.elevenlabs}` : "boş bırakabilirsin";
+    }).catch(() => {});
     $("#setSens").value = localGet("sens") || "1";
     $("#settingsDlg").showModal();
     if (st.tts_provider !== "elevenlabs") return;
@@ -921,6 +927,15 @@
     } catch (e) { toast("Mikrofon açılamadı: " + e.message); }
   };
   $("#saveSettings").onclick = async () => {
+    const keys = {};
+    if ($("#keyGemini").value.trim()) keys.gemini = $("#keyGemini").value.trim();
+    if ($("#keyAnthropic").value.trim()) keys.anthropic = $("#keyAnthropic").value.trim();
+    if ($("#keyEleven").value.trim()) keys.elevenlabs = $("#keyEleven").value.trim();
+    if (Object.keys(keys).length) {
+      try { await postJSON("/api/keys", keys); toast("Anahtarlar kaydedildi."); }
+      catch (e) { toast("Anahtar kaydedilemedi: " + e.message); }
+      if (keys.gemini && !keys.anthropic) $("#setLlm").value = "gemini";
+    }
     const o = $("#setVoice").selectedOptions[0];
     S.settings = await postJSON("/api/settings", {
       voice_id: $("#setVoice").value || S.settings.voice_id,
@@ -969,6 +984,13 @@
 
   // ================================================================ başlat
   loadSettings().catch(() => {});
+  // İlk açılış: hiç beyin anahtarı yoksa Ayarlar'ı aç
+  api("/api/keys").then((k) => {
+    if (!k.gemini && !k.anthropic) {
+      toast("Hoşgeldin! Başlamak için ücretsiz Gemini anahtarını Ayarlar'a gir.", 7000);
+      $("#settingsBtn").click();
+    }
+  }).catch(() => {});
   if (localGet("hoca3d") !== "0" && !matchMedia("(prefers-reduced-motion: reduce)").matches) enable3D(true);
   loadCourses().catch((e) => toast("Sunucuya bağlanılamadı: " + e.message));
 })();

@@ -15,7 +15,7 @@ import asyncio
 
 import httpx
 
-from .config import ELEVENLABS_API_KEY
+from .config import elevenlabs_key
 
 API = "https://api.elevenlabs.io/v1"
 # Aynı anda en fazla bu kadar ses üretimi (ElevenLabs eşzamanlılık sınırı için).
@@ -35,9 +35,9 @@ def _http() -> httpx.AsyncClient:
 
 
 def _headers() -> dict:
-    if not ELEVENLABS_API_KEY:
-        raise VoiceError("ElevenLabs seçili ama anahtarı yok. Ayarlar'dan ücretsiz bir ses kaynağı seç ya da .env'e ELEVENLABS_API_KEY ekle.")
-    return {"xi-api-key": ELEVENLABS_API_KEY}
+    if not elevenlabs_key():
+        raise VoiceError("ElevenLabs seçili ama anahtarı yok. Ayarlar'dan ücretsiz bir ses kaynağı seç ya da Ayarlar → API anahtarları'na ElevenLabs anahtarını gir.")
+    return {"xi-api-key": elevenlabs_key()}
 
 
 async def synthesize(

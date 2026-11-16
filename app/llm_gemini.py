@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 from typing import AsyncIterator
 
-from .config import GEMINI_API_KEY, load_settings
+from .config import gemini_key, load_settings
 
 _client = None
 
@@ -21,14 +21,16 @@ class GeminiError(RuntimeError):
 
 def client():
     global _client
-    if not GEMINI_API_KEY:
-        raise GeminiError("Gemini seçili ama GEMINI_API_KEY yok. Ücretsiz anahtar: https://aistudio.google.com/apikey")
-    if _client is None:
+    key = gemini_key()
+    if not key:
+        raise GeminiError("Gemini anahtarı girilmemiş: Ayarlar → API anahtarları. Ücretsiz anahtar: https://aistudio.google.com/apikey")
+    if _client is None or getattr(_client, "_ders_key", None) != key:
         try:
             from google import genai
         except ImportError as e:
             raise GeminiError("Gemini paketi eksik: pip install -r requirements.txt") from e
-        _client = genai.Client(api_key=GEMINI_API_KEY)
+        _client = genai.Client(api_key=key)
+        _client._ders_key = key
     return _client
 
 
@@ -86,7 +88,7 @@ def _err(e: Exception) -> GeminiError:
         return GeminiError("Gemini ücretsiz kotası şimdilik doldu (dakikalık ya da günlük sınır). Biraz bekleyip tekrar dene.",
                            quota=True)
     if code in (401, 403) or "API_KEY" in msg.upper():
-        return GeminiError("Gemini anahtarı geçersiz (.env → GEMINI_API_KEY).")
+        return GeminiError("Gemini anahtarı geçersiz (Ayarlar → API anahtarları).")
     if code == 404:
         return GeminiError(f"Gemini modeli bulunamadı: {_model()}. Ayarlar'dan başka bir model seç.")
     return GeminiError(f"Gemini hatası: {msg[:300]}")

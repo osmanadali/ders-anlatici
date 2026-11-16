@@ -167,6 +167,19 @@
 <dialog id="settingsDlg">
   <form method="dialog" class="settings">
     <h3>Ayarlar</h3>
+    <fieldset class="keys">
+      <legend>API anahtarları</legend>
+      <label>Gemini anahtarı (ÜCRETSİZ) <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">→ buradan al</a>
+        <input id="keyGemini" type="password" autocomplete="off" placeholder="AIza… ile başlar">
+      </label>
+      <label>Claude anahtarı (ücretli, isteğe bağlı) <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">→ buradan al</a>
+        <input id="keyAnthropic" type="password" autocomplete="off" placeholder="sk-ant-… ile başlar">
+      </label>
+      <label>ElevenLabs anahtarı (ücretli, isteğe bağlı)
+        <input id="keyEleven" type="password" autocomplete="off" placeholder="boş bırakabilirsin">
+      </label>
+      <p class="muted small">Anahtarlar sadece bu bilgisayardaki <code>.env</code> dosyasına kaydedilir. Kayıtlı olanı değiştirmek istemiyorsan alanı boş bırak.</p>
+    </fieldset>
     <label>Hocanın beyni
       <select id="setLlm">
         <option value="gemini">Gemini: ÜCRETSİZ (günlük kotalı)</option>

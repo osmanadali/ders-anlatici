@@ -78,7 +78,7 @@ def test_short_chat_skips_deep_solve(gemini):
 
 def test_quota_falls_back_to_claude(monkeypatch):
     config.save_settings({"llm_provider": "gemini"})
-    monkeypatch.setattr(llm, "ANTHROPIC_API_KEY", "x")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
 
     async def boom(system, messages):
         raise llm_gemini.GeminiError("kota", quota=True)
@@ -100,8 +100,8 @@ def test_quota_falls_back_to_claude(monkeypatch):
 
 def test_provider_auto(monkeypatch):
     config.save_settings({"llm_provider": ""})
-    monkeypatch.setattr(llm, "ANTHROPIC_API_KEY", "")
-    monkeypatch.setattr(llm, "GEMINI_API_KEY", "g")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
     assert llm.provider() == "gemini"
-    monkeypatch.setattr(llm, "ANTHROPIC_API_KEY", "a")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
     assert llm.provider() == "claude"
