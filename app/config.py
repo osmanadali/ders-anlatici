@@ -19,7 +19,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Notların tamamı bu karakter sınırının altındaysa hepsi modele verilir (önbellekli);
 # üstündeyse soruyla ilgili sayfalar seçilir.
-FULL_NOTES_CHAR_LIMIT = int(os.getenv("FULL_NOTES_CHAR_LIMIT", "600000"))
+FULL_NOTES_CHAR_LIMIT = int(os.getenv("FULL_NOTES_CHAR_LIMIT", "200000"))  # ~55 bin token; üstünde ilgili sayfalar seçilir
 
 # ---------------------------------------------------------------- API anahtarları
 # Anahtarlar her kullanımda ortamdan okunur; Ayarlar'dan girilince yeniden başlatma gerekmez.

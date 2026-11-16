@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, curriculum, llm, notes, prompts, store, voice
+from . import auth, curriculum, hazir, llm, notes, prompts, store, voice
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
@@ -265,6 +265,12 @@ async def upload_doc(course_id: str, file: UploadFile = File(...)):
     except Exception as e:  # ör. eksik paket, bozuk PDF: sebebi kullanıcıya ve log'a yaz
         log.exception("not yüklenemedi: %s", file.filename)
         raise HTTPException(500, f"{type(e).__name__}: {e}")
+    # Hazır ders paketinde varsa: taranmış sayfa metinleri, özet, ders planı… kendiliğinden eklenir
+    try:
+        if hazir.apply_to_document(course_id, doc, file.filename or ""):
+            doc = notes.find_doc(notes.get_course(course_id), doc["id"]) or doc
+    except Exception:
+        log.exception("hazır paket uygulanamadı: %s", file.filename)
     _schedule_ocr(course_id, doc)
     return doc
 

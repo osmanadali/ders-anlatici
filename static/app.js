@@ -440,6 +440,16 @@
     S.course = id ? await api(`/api/courses/${id}`) : null;
     S.plan = null; S.lectureActive = false;
     $("#planList").innerHTML = ""; $("#planStatus").textContent = "";
+    if (S.course?.lecture_plan) {  // hazır ders paketinden ya da önceden çıkarılmış plan
+      S.plan = S.course.lecture_plan;
+      $("#planStatus").textContent = (S.plan.hazir ? "📦 Hazır ders planı (notların tamamından): " : "") + S.plan.title + " — başlamak için bir bölüme tıkla.";
+      renderPlan();
+    }
+    const rb = $("#rehberBox");
+    if (S.course?.sinav_rehberi) {
+      rb.classList.remove("hidden");
+      rb.querySelector("div").innerHTML = BoardUtil.renderInline(S.course.sinav_rehberi).replace(/\n/g, "<br>");
+    } else rb.classList.add("hidden");
     renderDocs();
     loadWeak();
     if ($("#tab-plan").classList.contains("active")) loadPlanTab();

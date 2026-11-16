@@ -175,6 +175,11 @@ def course_knowledge(course: dict | None, notes_text: str, full: bool) -> str:
     profile = prompts.course_profile_block(course)
     if profile:
         parts.append(profile)
+    from . import hazir
+
+    guide = hazir.course_guide(course)
+    if guide:
+        parts.append(guide)
     if notes_text:
         parts.append(prompts.notes_block(course["name"], notes_text, full))
     elif not profile:
