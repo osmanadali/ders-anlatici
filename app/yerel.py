@@ -30,6 +30,14 @@ log = logging.getLogger("ders.yerel")
 HOST = os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434").rstrip("/")
 RUNTIME_DIR = DATA_DIR / "yerel-yz"
 MODELS_DIR = RUNTIME_DIR / "modeller"
+
+
+def modeller_klasoru() -> Path:
+    """Ollama Windows'ta Türkçe/özel karakterli yollarda (ör. kullanıcı adında 'ı') model indirirken takılabiliyor:
+    öyle bir yolda modeller sürücü kökünde ASCII bir klasöre iner."""
+    if os.name == "nt" and not str(MODELS_DIR).isascii():
+        return Path(os.environ.get("SystemDrive", "C:") + "\\") / "DersAnlaticiModeller"
+    return MODELS_DIR
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 # Donanıma göre model: (etiket, indirme GB). Gemma 4: çok dilli (Türkçe iyi), görüntü okur (taranmış not, ekran görüntüsü).
@@ -238,9 +246,10 @@ async def install_runtime() -> str:
 
 async def start_server(binary: str) -> None:
     global _proc
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    klasor = modeller_klasoru()
+    klasor.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
-    env.setdefault("OLLAMA_MODELS", str(MODELS_DIR))
+    env.setdefault("OLLAMA_MODELS", str(klasor))
     env["OLLAMA_HOST"] = HOST.split("://", 1)[-1]
     env.setdefault("OLLAMA_KEEP_ALIVE", "30m")
     logf = open(DATA_DIR / "yerel-yz.log", "ab")
@@ -267,10 +276,27 @@ def stop_server() -> None:
     _proc = None
 
 
+def _kendi_sunucumuzu_kapat() -> None:
+    """Önceki açılıştan kalmış, bizim indirdiğimiz programla çalışan sunucuyu kapatır (kullanıcının kendi Ollama'sına dokunmaz)."""
+    stop_server()
+    if os.name != "nt":
+        return
+    yol = str(_runtime_binary()).replace("'", "''")
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-Command",
+                        f"Get-Process ollama -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -eq '{yol}' }} | Stop-Process -Force"],
+                       capture_output=True, timeout=30, creationflags=NO_WINDOW)
+    except Exception:
+        pass
+
+
+TAKILMA_SN = 90  # indirme bu kadar süre hiç ilerlemezse takılmış sayılır
+
+
 async def pull(model: str) -> None:
     totals: dict[str, int] = {}
     done: dict[str, int] = {}
-    async with httpx.AsyncClient(timeout=httpx.Timeout(60, read=600)) as c:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60, read=TAKILMA_SN)) as c:
         async with c.stream("POST", f"{HOST}/api/pull", json={"model": model, "stream": True}) as r:
             r.raise_for_status()
             async for line in r.aiter_lines():
@@ -324,7 +350,22 @@ async def hazirla() -> dict:
             if STATE["hw"]["disk_gb"] < need:
                 raise RuntimeError(f"Diskte yer yok: {model} için ~{need:.0f} GB gerekiyor, {STATE['hw']['disk_gb']} GB boş.")
             _set("kuruluyor", f"Model indiriliyor ({model})…", 0)
-            await pull(model)
+            try:
+                await pull(model)
+            except (httpx.ReadTimeout, httpx.RemoteProtocolError) as e:
+                # Takıldı: kendi programımızı yeniden başlatıp (güvenli model klasörüyle) bir kez daha dene
+                log.warning("model indirme takıldı (%s); program yeniden başlatılıyor", e)
+                binary = find_binary()
+                if not binary or binary != str(_runtime_binary()):
+                    raise RuntimeError("Model indirmesi ilerlemiyor. İnternet bağlantını kontrol edip 'Kur / yeniden dene'ye bas.") from e
+                _set("kuruluyor", "İndirme takıldı; yapay zeka programı yeniden başlatılıyor…", None)
+                await asyncio.to_thread(_kendi_sunucumuzu_kapat)
+                await start_server(binary)
+                try:
+                    await pull(model)
+                except (httpx.ReadTimeout, httpx.RemoteProtocolError) as e2:
+                    raise RuntimeError("Model indirmesi ilerlemiyor (ayrıntı: veri/yerel-yz.log). İnternet bağlantını "
+                                       "kontrol edip 'Kur / yeniden dene'ye bas.") from e2
         _set("kuruluyor", "Model belleğe yükleniyor…", None)
         await warm(model)
         _set("hazir", f"{model} bu bilgisayarda çalışıyor", None)
