@@ -22,6 +22,7 @@ import time
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 
+import shutil
 import httpx
 
 from . import config, notes
@@ -474,6 +475,94 @@ async def _ders_tara(client, c: dict, bugun: date, durum_d: dict, rapor: dict, k
     return eklenen
 
 
+# ---------------------------------------------------------------- açık erişimli ders kitapları (OpenStax, CC lisanslı)
+OPENSTAX_API = ("https://openstax.org/apps/cms/api/v2/pages/?type=books.Book"
+                "&fields=title,book_state,pdf_url,license_name&limit=200")
+# Dersin İngilizce adındaki anahtar kelime → uygun OpenStax kitapları (başlıkları)
+KITAP_KURALLARI = [
+    (("PROBABILITY", "STATISTIC"), ("Introductory Statistics 2e", "Introductory Business Statistics 2e")),
+    (("CALCULUS",), ("Calculus Volume 1", "Calculus Volume 2")),
+    (("DIFFERENTIAL EQUATION",), ("Calculus Volume 3",)),
+    (("PHYSICS",), ("University Physics Volume 1", "University Physics Volume 2")),
+    (("CHEMISTRY",), ("Chemistry 2e",)),
+    (("ECONOMICS", "ECONOMY"), ("Principles of Economics 3e",)),
+    (("ACCOUNTING", "COST"), ("Principles of Accounting, Volume 2: Managerial Accounting",)),
+    (("FINANCE", "FEASIBILITY", "BANKING"), ("Principles of Finance 2e",)),
+    (("MANAGEMENT",), ("Principles of Management",)),
+    (("ORGANIZATION", "HUMAN RESOURCE", "BEHAVIOR"), ("Organizational Behavior",)),
+    (("ENTREPRENEUR",), ("Entrepreneurship",)),
+    (("MARKETING",), ("Principles of Marketing",)),
+    (("ETHIC",), ("Business Ethics",)),
+    (("DATA", "INFORMATION SYSTEM", "BUSINESS INTELLIGENCE"), ("Principles of Data Science", "Foundations of Information Systems")),
+    (("PROGRAMMING", "COMPUTER"), ("Introduction to Python Programming",)),
+]
+KITAP_TUR_LIMIT = 2  # bir taramada indirilen en fazla kitap (büyük dosyalar)
+
+
+def kitap_onerileri(dersler: list[dict]) -> list[tuple[str, str]]:
+    """[(kitap başlığı, ders kodu)]: kullanıcının derslerine uyan kitaplar (sıra: ders sırası)."""
+    out, gorulen = [], set()
+    for c in dersler:
+        ad = ((c.get("profile") or {}).get("ad_en") or "").upper()
+        if not ad:
+            continue
+        for anahtarlar, kitaplar in KITAP_KURALLARI:
+            if any(k in ad for k in anahtarlar):
+                for b in kitaplar:
+                    if b not in gorulen:
+                        gorulen.add(b)
+                        out.append((b, (c.get("profile") or {}).get("kod") or ""))
+    return out
+
+
+async def _kitaplar(client, d: dict, rapor: dict) -> int:
+    """Derslere uyan serbest lisanslı ders kitaplarını indirip kütüphaneye ekler (en fazla KITAP_TUR_LIMIT)."""
+    if not config.load_settings().get("kitap_otomatik", True):
+        return 0
+    oneriler = [(b, k) for b, k in kitap_onerileri(notes.list_courses()) if b not in (d.get("kitaplar") or {})]
+    if not oneriler:
+        return 0
+    try:
+        await _sira()
+        r = await client.get(OPENSTAX_API)
+        r.raise_for_status()
+        katalog = {b["title"]: b for b in r.json().get("items", [])
+                   if b.get("book_state") == "live" and b.get("pdf_url") and "Creative Commons" in (b.get("license_name") or "")}
+    except Exception as e:
+        rapor["hatalar"].append(f"OpenStax: {e}")
+        return 0
+    eklenen = 0
+    kutuphane = _kutuphane()
+    for baslik, kod in oneriler:
+        if eklenen >= KITAP_TUR_LIMIT:
+            break
+        b = katalog.get(baslik)
+        if not b:
+            continue
+        try:
+            await _sira()
+            h = await client.head(b["pdf_url"])
+            boyut = int(h.headers.get("content-length") or 0)
+            bos = shutil.disk_usage(config.DATA_DIR).free
+            if not boyut or boyut > kutuphane.MAX_BOYUT or bos < boyut + 3 * 2**30:
+                d.setdefault("kitaplar", {})[baslik] = {"atlandi": "boyut/disk", "zaman": _simdi()}
+                continue
+            r = await client.get(b["pdf_url"], timeout=httpx.Timeout(30, read=300))
+            r.raise_for_status()
+            k = await asyncio.to_thread(kutuphane.ekle_dosya, re.sub(r"[^\w .,-]+", "", baslik) + ".pdf", r.content, "kitap")
+            alanlar = {"baslik": baslik, "yazar": "OpenStax (CC lisanslı)"}
+            if kod:
+                alanlar["dersler"] = [kod]
+            await asyncio.to_thread(kutuphane.guncelle, k["id"], alanlar)
+            d.setdefault("kitaplar", {})[baslik] = {"id": k["id"], "zaman": _simdi()}
+            eklenen += 1
+        except ValueError as e:  # ör. zaten kütüphanede
+            d.setdefault("kitaplar", {})[baslik] = {"atlandi": str(e), "zaman": _simdi()}
+        except Exception as e:
+            rapor["hatalar"].append(f"Kitap indirilemedi ({baslik}): {e}")
+    return eklenen
+
+
 async def guncelle(zorla: bool = False) -> dict:
     """Bir tarama turu. zorla=False iken son taramadan 7 gün geçmediyse hiçbir şey yapmaz."""
     global _calisiyor
@@ -508,8 +597,9 @@ async def guncelle(zorla: bool = False) -> dict:
                     continue
                 if "crossref" not in kapali:
                     ders_son[_ders_kodu(c)] = _simdi()
+            kitap = await _kitaplar(client, d, rapor)
         basari = not ({"crossref", "arxiv"} <= kapali) and bool(secilen)
-        sonuc = {"yeni": rapor["yeni"], "ders_bazinda": rapor["ders_bazinda"], "hatalar": rapor["hatalar"]}
+        sonuc = {"yeni": rapor["yeni"], "ders_bazinda": rapor["ders_bazinda"], "hatalar": rapor["hatalar"], "kitap": kitap}
         d["ders_son"] = ders_son
         d["son_sonuc"] = dict(sonuc, zaman=_simdi())
         if not secilen:
@@ -517,6 +607,12 @@ async def guncelle(zorla: bool = False) -> dict:
         elif basari:
             d["son_tarama"] = _simdi()  # tamamen çevrimdışıysa tarih ilerlemez, sonraki saatte tekrar denenir
         _durum_yaz(d)
+        if kitap:
+            try:
+                from . import klasor
+                klasor.olay("literatur", f"📘 {kitap} serbest lisanslı ders kitabı kütüphaneye eklendi (OpenStax)")
+            except Exception:
+                pass
         if sonuc["yeni"]:
             try:
                 from . import klasor

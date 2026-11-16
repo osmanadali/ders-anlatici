@@ -42,6 +42,8 @@ Ayrıca: hoca karakteri (sese göre ağız hareketi, yazma/dinleme/düşünme po
 - **Gizlilik:** Kitapların bilgisayarından çıkmaz; Gemini yedeği açıkken bile kitap bölümleri buluta gönderilmez (o sırada cevaplar kaynaksız verilir). Literatür taramasında yalnızca makalenin başlığı, özeti ve açık erişim PDF'i iner; kişisel bilgin gönderilmez.
 - **Sınırlama:** Taranmış kitap sayfaları varsayılan olarak okunmaz. Ayarlar'dan açabilirsin, ama işlemesi yavaştır.
 
+- **Kitapları da kendisi bulur:** literatür taramasında derslerine uyan **serbest lisanslı (Creative Commons) ders kitaplarını** (OpenStax: istatistik, kalkülüs, fizik, ekonomi, maliyet muhasebesi, finans, yönetim, örgütsel davranış, girişimcilik, veri bilimi, Python…) indirip kütüphaneye ekler. Her taramada en fazla 2 kitap, diskte yer varsa. Telifli kitapları indirmez; onları sen eklersin. Kapatmak için ayar: `kitap_otomatik`.
+
 ### 📥 Notu tanıyıp doğru derse ekler
 
 - **📥 Not ekle** düğmesi (ya da dosyayı pencereye sürükle-bırak): ders seçmene gerek yok. Uygulama notun hangi derse ait olduğunu bulur: dosya adındaki/notun içindeki ders kodu (ör. ENM 463), konu benzerliği (müfredattaki ders içerikleri ve dersin önceki notları), kararsız kalırsa yerel yapay zeka. Ders henüz yoksa müfredattan (içerik ve haftalık konularıyla) oluşturur. Birlikte yüklenen notlar aynı derse gider. Yanlış derse giderse notun yanındaki **↪** ile taşı.

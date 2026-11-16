@@ -84,6 +84,7 @@ DEFAULTS = {
     "kutuphane_ocr": False,  # kütüphanedeki taranmış PDF sayfalarını yerel yapay zekayla oku (yavaş)
     "literatur_pdf": True,  # literatür taramasında açık erişim PDF'in tam metnini de al
     "openalex_api_key": "",  # isteğe bağlı: OpenAlex kotası dolarsa
+    "kitap_otomatik": True,  # literatür taramasında derslere uyan serbest lisanslı ders kitaplarını da ekle
     "literatur_otomatik": True,  # haftada bir literatür taraması (yeni makaleler kütüphaneye)
 }
 

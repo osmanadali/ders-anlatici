@@ -185,3 +185,40 @@ def test_ders_yokken_son_tarama_ilerlemez(ortam):
     s, _ = calistir()
     assert s["yeni"] == 0
     assert lit.durum()["son_tarama"] is None  # ders eklenince hemen taranabilsin
+
+
+def test_derse_uyan_acik_lisansli_kitap_indirilir(ortam, monkeypatch):
+    eklenen = []
+    ortam.MAX_BOYUT = 300 * 2**20
+    ortam.ekle_dosya = lambda ad, veri, tur: eklenen.append((ad, len(veri), tur)) or {"id": "b1"}
+    ortam.guncelle = lambda kid, alanlar: eklenen.append(alanlar)
+    katalog = {"items": [
+        {"title": "Introductory Statistics 2e", "book_state": "live", "pdf_url": "https://assets.openstax.org/s.pdf",
+         "license_name": "Creative Commons Attribution License"},
+        {"title": "Introductory Business Statistics 2e", "book_state": "live",
+         "pdf_url": "https://assets.openstax.org/b.pdf", "license_name": "Creative Commons Attribution License"},
+        {"title": "Calculus Volume 1", "book_state": "live", "pdf_url": "https://assets.openstax.org/c.pdf",
+         "license_name": "Creative Commons"}]}
+    eski = _handler
+
+    def h2(istekler, **kw):
+        h = eski(istekler, **kw)
+
+        def g(req):
+            if req.url.host == "openstax.org":
+                istekler.append(str(req.url))
+                return httpx.Response(200, json=katalog)
+            if req.url.host == "assets.openstax.org":
+                istekler.append(req.method + " " + str(req.url))
+                return httpx.Response(200, content=b"%PDF-1.4 kitap", headers={"content-length": "14"})
+            return h(req)
+        return g
+
+    monkeypatch.setattr(sys.modules[__name__], "_handler", h2)
+    sonuc, istekler = calistir()
+    assert sonuc["kitap"] == 2  # STATISTIC dersi → iki istatistik kitabı; Calculus dersi yok
+    assert [e[0] for e in eklenen if isinstance(e, tuple)] == ["Introductory Statistics 2e.pdf", "Introductory Business Statistics 2e.pdf"]
+    assert {"baslik": "Introductory Statistics 2e", "yazar": "OpenStax (CC lisanslı)", "dersler": ["ENM 305"]} in eklenen
+    eklenen.clear()
+    sonuc, _ = calistir()
+    assert sonuc["kitap"] == 0 and not eklenen  # aynı kitap ikinci kez indirilmez
