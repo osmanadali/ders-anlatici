@@ -61,6 +61,35 @@ async def index():
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+# ================================================================ 3B hoca modeli (Tripo vb. iskeletli GLB)
+TEACHER_GLB = DATA_DIR / "hoca.glb"
+
+
+@app.api_route("/api/teacher-model", methods=["GET", "HEAD"])
+async def teacher_model():
+    if not TEACHER_GLB.exists():
+        raise HTTPException(404, "Model yok")
+    st = TEACHER_GLB.stat()
+    return FileResponse(TEACHER_GLB, media_type="model/gltf-binary", headers={"ETag": f'"{int(st.st_mtime)}-{st.st_size}"'})
+
+
+@app.post("/api/teacher-model")
+async def upload_teacher_model(file: UploadFile = File(...)):
+    data = await file.read()
+    if data[:4] != b"glTF":
+        raise HTTPException(400, "Bu bir GLB dosyası değil. Tripo'dan modeli 'GLB' biçiminde indir.")
+    if len(data) > 200 * 1024 * 1024:
+        raise HTTPException(400, "Model 200 MB'tan büyük; Tripo'da daha düşük çözünürlükle indir.")
+    TEACHER_GLB.write_bytes(data)
+    return {"ok": True, "mb": round(len(data) / 1e6, 1)}
+
+
+@app.delete("/api/teacher-model")
+async def delete_teacher_model():
+    TEACHER_GLB.unlink(missing_ok=True)
+    return {"ok": True}
+
+
 # ================================================================ telefondan erişim
 @app.get("/giris")
 async def login_page():

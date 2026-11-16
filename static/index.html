@@ -239,6 +239,13 @@
       <select id="setEffort"><option value="low">Hızlı</option><option value="medium">Dengeli</option><option value="high">Derin (zor sorular)</option></select>
     </label>
     <label class="check"><input id="set3d" type="checkbox"> 3B sınıf ve hoca (kapalıysa 2B çizim; eski bilgisayarda kapat)</label>
+    <div class="row">
+      <label class="ghost small file-label" title="Tripo vb. ile yapılmış, iskeletli (rig) GLB modeli">🧑‍🏫 Hoca modeli (GLB) yükle
+        <input id="glbInput" type="file" accept=".glb,model/gltf-binary" hidden></label>
+      <button type="button" id="glbFlip" class="ghost small" title="Model sırtı dönük duruyorsa">↻ 180° çevir</button>
+      <button type="button" id="glbReset" class="ghost small">Varsayılan hoca</button>
+      <span id="glbStatus" class="muted small"></span>
+    </div>
     <label class="check"><input id="setWeb" type="checkbox"> Gerekirse internette araştırabilsin (daha yavaş)</label>
     <label>Konuşmalı derste konuşma tanıma
       <select id="setConvStt">

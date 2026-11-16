@@ -10,7 +10,8 @@
     if (on && !teacher3d && webglOk()) {
       try {
         const m = await import("/static/teacher3d.js");
-        teacher3d = m.mount({ root: $(".classroom"), board, teacher2d });
+        teacher3d = m.mount({ root: $(".classroom"), board, teacher2d,
+          onError: (err) => toast("Hoca modeli yüklenemedi: " + (err?.message || err) + " (varsayılan hoca kullanılıyor)", 9000) });
         teacher = teacher3d;
       } catch (e) { console.warn("3B sınıf açılamadı, 2B devam", e); toast("3B sınıf açılamadı, 2B hocayla devam ediliyor."); }
     } else if (!on && teacher3d) {
@@ -993,6 +994,22 @@
     if (S.conv) S.conv.sensitivity = Number($("#setSens").value);
     toast("Ayarlar kaydedildi.");
   };
+
+  // ---------------- 3B hoca modeli (GLB)
+  async function reload3D() { if (teacher3d) { await enable3D(false); await enable3D(true); } }
+  $("#glbInput").onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    $("#glbStatus").textContent = "Yükleniyor…";
+    const fd = new FormData(); fd.append("file", f, f.name);
+    try {
+      const r = await api("/api/teacher-model", { method: "POST", body: fd });
+      $("#glbStatus").textContent = `✔ Model yüklendi (${r.mb} MB)`;
+      await reload3D();
+    } catch (err) { $("#glbStatus").textContent = "Hata: " + err.message; }
+  };
+  $("#glbFlip").onclick = async () => { localSet("hocaCevir", localGet("hocaCevir") === "1" ? "0" : "1"); await reload3D(); };
+  $("#glbReset").onclick = async () => { await api("/api/teacher-model", { method: "DELETE" }); $("#glbStatus").textContent = "Varsayılan hocaya dönüldü."; await reload3D(); };
 
   function localGet(k) { try { return localStorage.getItem("ders." + k); } catch { return null; } }
   function localSet(k, v) { try { localStorage.setItem("ders." + k, v); } catch {} }

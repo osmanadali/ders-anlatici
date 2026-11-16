@@ -125,6 +125,40 @@ function relaxArm(arm, sx, t, gesture = 0) {
   arm.elbow.rotation.x = lerp(arm.elbow.rotation.x, -0.25 - g * 1.1, 0.12);
 }
 
+// Kodla çizilmiş hoca için ortak "pose" arayüzü (GLB modelle aynı)
+function proceduralRig() {
+  const T = buildTeacher();
+  return {
+    root: T.root, headObj: T.head,
+    pose(p, dt) {
+      const sw = p.walking ? Math.sin(p.walkPhase) * 0.5 : 0;
+      T.legs[0].hip.rotation.x = sw; T.legs[1].hip.rotation.x = -sw;
+      T.legs[0].knee.rotation.x = Math.max(0, -Math.sin(p.walkPhase - 0.6)) * (p.walking ? 0.8 : 0);
+      T.legs[1].knee.rotation.x = Math.max(0, Math.sin(p.walkPhase - 0.6)) * (p.walking ? 0.8 : 0);
+      T.body.position.y = p.bob;
+      T.torso.rotation.z = damp(T.torso.rotation.z, p.sway, 6, dt);
+      T.torso.rotation.x = damp(T.torso.rotation.x, p.lean, 4, dt);
+      T.head.rotation.x = damp(T.head.rotation.x, p.head.x, 5, dt);
+      T.head.rotation.y = damp(T.head.rotation.y, p.head.y, 5, dt);
+      T.head.rotation.z = damp(T.head.rotation.z, p.head.z, 5, dt);
+      if (p.reachR) {
+        reach(T.arms.R, p.reachR, -1);
+        relaxArm(T.arms.L, -1, p.t, 0);
+      } else if (p.think) {
+        T.head.updateMatrixWorld(true);
+        reach(T.arms.R, T.head.localToWorld(new THREE.Vector3(0.0, 0.0, 0.12)), -1);
+        relaxArm(T.arms.L, -1, p.t, 0);
+      } else {
+        relaxArm(T.arms.R, 1, p.t, p.talkR);
+        relaxArm(T.arms.L, -1, p.t + 1.7, p.talkL);
+        T.arms.R.shoulder.rotation.x += -p.swing * 0.5; T.arms.L.shoulder.rotation.x += p.swing * 0.5;
+      }
+      T.mouth.scale.y = damp(T.mouth.scale.y, 0.15 + p.mouth * 1.1, 18, dt);
+      T.eyes.forEach((e) => (e.scale.y = p.blink ? 0.1 : 1));
+    },
+  };
+}
+
 // ------------------------------------------------------------------ sahne
 export function mount({ root, board, teacher2d, onError }) {
   const boardEl = document.getElementById("board");
@@ -176,12 +210,25 @@ export function mount({ root, board, teacher2d, onError }) {
   desk.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   desk.position.set(-2.7, 0, 1.2); scene.add(desk);
 
-  const T = buildTeacher();
-  T.root.position.copy(HOME);
-  scene.add(T.root);
+  // Hoca: önce kodla çizilen; veri/ klasöründe GLB model varsa (Tripo vb.) yüklenince onunla değiştirilir
+  let rig = proceduralRig();
+  rig.root.position.copy(HOME);
+  scene.add(rig.root);
+  const T = { get root() { return rig.root; }, get head() { return rig.headObj; } };
+  fetch("/api/teacher-model", { method: "HEAD" }).then(async (r) => {
+    if (!r.ok) return;
+    const { loadGlbRig } = await import("/static/teacher_glb.js");
+    let flip = false;
+    try { flip = localStorage.getItem("ders.hocaCevir") === "1"; } catch {}
+    const g = await loadGlbRig("/api/teacher-model?v=" + (r.headers.get("etag") || Date.now()), { flip });
+    g.root.position.copy(rig.root.position); g.root.rotation.copy(rig.root.rotation);
+    scene.remove(rig.root); scene.add(g.root); rig = g;
+    window.__hocaRig = g;  // tanılama için
+  }).catch((e) => { console.warn("Hoca modeli yüklenemedi:", e); onError?.(e); });
 
   // ---------------- durum
-  const S = { state: "idle", yaw: 0, walkPhase: 0, approach: null, approachUntil: 0, nextBlink: 2, lastState: "idle", stateSince: 0 };
+  const S = { state: "idle", yaw: 0, walkPhase: 0, approach: null, approachUntil: 0, nextBlink: 2, blinkUntil: 0,
+              lastState: "idle", stateSince: 0, head: { x: 0, y: 0, z: 0 } };
   const target = new THREE.Vector3().copy(HOME);
   const hand = new THREE.Vector3();
 
@@ -232,7 +279,7 @@ export function mount({ root, board, teacher2d, onError }) {
     let faceYaw = 0;  // 0 = öğrenciye dönük, π = tahtaya dönük
     const pen = st === "writing" ? penWorld() : null;
     if (pen) {
-      target.set(THREE.MathUtils.clamp(pen.x + 0.28, -1.7, 1.9), 0, 0.5);
+      target.set(THREE.MathUtils.clamp(pen.x + 0.26, -1.7, 1.9), 0, 0.36);  // kol (~0.58 m) tahtaya yetişsin
       faceYaw = Math.PI;
     } else if (st === "talking" && S.approach && t < S.approachUntil) {
       target.copy(S.approach);
@@ -261,48 +308,29 @@ export function mount({ root, board, teacher2d, onError }) {
     }
     T.root.rotation.y = S.yaw;
 
-    // bacaklar
-    const sw = Math.sin(S.walkPhase) * (walking ? 0.5 : 0);
-    T.legs[0].hip.rotation.x = sw; T.legs[1].hip.rotation.x = -sw;
-    T.legs[0].knee.rotation.x = Math.max(0, -Math.sin(S.walkPhase - 0.6)) * (walking ? 0.8 : 0);
-    T.legs[1].knee.rotation.x = Math.max(0, Math.sin(S.walkPhase - 0.6)) * (walking ? 0.8 : 0);
-    T.body.position.y = walking ? Math.abs(Math.cos(S.walkPhase)) * 0.025 : Math.sin(t * 1.6) * 0.004;
-
-    // gövde ve baş
-    T.torso.rotation.z = damp(T.torso.rotation.z, walking ? Math.sin(S.walkPhase) * 0.03 : 0, 6, dt);
+    // poz: ne yapılacağını hesapla, iskelete (kodla çizilen ya da GLB) uygula
     let headX = 0, headZ = 0, headY = 0;
     if (st === "listening") { headZ = 0.14; headX = 0.06; }
     if (st === "thinking") { headX = -0.18; headZ = -0.06; }
     if (st === "talking") { headX = Math.sin(t * 2.3) * 0.05; headY = Math.sin(t * 0.9) * 0.12; }
     if (pen) { headX = (pen.y - 1.55) * -0.35; headZ = 0.05; }
-    T.head.rotation.x = damp(T.head.rotation.x, headX, 5, dt);
-    T.head.rotation.y = damp(T.head.rotation.y, headY, 5, dt);
-    T.head.rotation.z = damp(T.head.rotation.z, headZ, 5, dt);
-    T.torso.rotation.x = damp(T.torso.rotation.x, st === "listening" ? 0.06 : 0, 4, dt);
-
-    // kollar
-    if (pen && dist < 0.6) {
-      hand.copy(pen).add(new THREE.Vector3(Math.sin(t * 19) * 0.012, Math.cos(t * 23) * 0.01, 0.04));
-      reach(T.arms.R, hand, -1);
-      relaxArm(T.arms.L, -1, t, 0);
-    } else if (st === "thinking") {
-      T.head.updateMatrixWorld(true);
-      reach(T.arms.R, T.head.localToWorld(new THREE.Vector3(0.0, 0.0, 0.12)), -1);
-      relaxArm(T.arms.L, -1, t, 0);
-    } else if (st === "listening") {
-      relaxArm(T.arms.R, 1, t, 0); relaxArm(T.arms.L, -1, t, 0);
-    } else {
-      const talk = st === "talking" && !walking ? 0.35 + level * 0.6 : 0;
-      const swing = walking ? Math.sin(S.walkPhase) * 0.35 : 0;
-      relaxArm(T.arms.R, 1, t, talk);
-      relaxArm(T.arms.L, -1, t + 1.7, talk * 0.6);
-      T.arms.R.shoulder.rotation.x += -swing * 0.5; T.arms.L.shoulder.rotation.x += swing * 0.5;
-    }
-
-    // ağız ve göz kırpma
-    const talking = st === "talking" || st === "writing";
-    T.mouth.scale.y = damp(T.mouth.scale.y, talking ? 0.15 + level * 1.1 : 0.15, 18, dt);
-    if (t > S.nextBlink) { T.eyes.forEach((e) => (e.scale.y = 0.1)); setTimeout(() => T.eyes.forEach((e) => (e.scale.y = 1)), 110); S.nextBlink = t + 2.5 + Math.random() * 3.5; }
+    S.head.x = damp(S.head.x, headX, 5, dt); S.head.y = damp(S.head.y, headY, 5, dt); S.head.z = damp(S.head.z, headZ, 5, dt);
+    const talkingNow = st === "talking" || st === "writing";
+    const talk = st === "talking" && !walking ? 0.35 + level * 0.6 : 0;
+    if (t > S.nextBlink) { S.blinkUntil = t + 0.11; S.nextBlink = t + 2.5 + Math.random() * 3.5; }
+    rig.pose({
+      t, walking, walkPhase: S.walkPhase,
+      bob: walking ? Math.abs(Math.cos(S.walkPhase)) * 0.025 : Math.sin(t * 1.6) * 0.004,
+      sway: walking ? Math.sin(S.walkPhase) * 0.03 : 0,
+      lean: st === "listening" ? 0.06 : 0,
+      head: S.head,
+      reachR: pen && dist < 0.45 ? hand.copy(pen).add(new THREE.Vector3(Math.sin(t * 19) * 0.012, Math.cos(t * 23) * 0.01, 0.04)) : null,
+      think: st === "thinking",
+      talkR: st === "listening" ? 0 : talk, talkL: st === "listening" ? 0 : talk * 0.6,
+      swing: walking ? Math.sin(S.walkPhase) * 0.35 : 0,
+      mouth: talkingNow ? level : 0,
+      blink: t < S.blinkUntil,
+    }, dt);
 
     // kamera: hocayı ve yazılan yeri yumuşakça takip et
     const head = T.head.getWorldPosition(new THREE.Vector3());
