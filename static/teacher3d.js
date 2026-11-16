@@ -236,7 +236,7 @@ export function mount({ root, board, teacher2d, onError }) {
     // Kalemin (ya da en son çizilen öğenin) tahtadaki yeri → dünya koordinatı
     const page = board.pages[board.view];
     if (!page) return null;
-    let px, py;
+    let px, py, standPx = null;
     const pen = page._pen;
     if (pen && getComputedStyle(pen).opacity !== "0") {
       const cs = getComputedStyle(pen);
@@ -246,12 +246,16 @@ export function mount({ root, board, teacher2d, onError }) {
       const it = items[items.length - 1];
       if (!it) return null;
       const t = performance.now() / 1000;
-      px = it.offsetLeft + it.offsetWidth * (0.5 + 0.45 * Math.sin(t * 1.3));
-      py = it.offsetTop - page.scrollTop + it.offsetHeight * (0.5 + 0.35 * Math.sin(t * 2.3));
+      // Şekil/grafik çizerken: el şeklin üzerinde gezinir, ama hoca şeklin ortasında sabit durur
+      px = it.offsetLeft + it.offsetWidth * (0.5 + 0.3 * Math.sin(t * 1.3));
+      py = it.offsetTop - page.scrollTop + it.offsetHeight * (0.5 + 0.3 * Math.sin(t * 2.3));
+      standPx = it.offsetLeft + it.offsetWidth * 0.5;
     }
     const bw = boardEl.clientWidth || BOARD_PX_W, bh = boardEl.clientHeight || BOARD_PX_H;
     px = Math.min(bw, Math.max(0, px + 10)); py = Math.min(bh, Math.max(0, py + 10));
-    return new THREE.Vector3((px / bw - 0.5) * BOARD_W, BOARD_Y + (0.5 - py / bh) * BOARD_H, 0.02);
+    const v = new THREE.Vector3((px / bw - 0.5) * BOARD_W, BOARD_Y + (0.5 - py / bh) * BOARD_H, 0.02);
+    v.standX = standPx === null ? v.x : (Math.min(bw, Math.max(0, standPx + 10)) / bw - 0.5) * BOARD_W;
+    return v;
   }
 
   function setState(s) {
@@ -279,7 +283,7 @@ export function mount({ root, board, teacher2d, onError }) {
     let faceYaw = 0;  // 0 = öğrenciye dönük, π = tahtaya dönük
     const pen = st === "writing" ? penWorld() : null;
     if (pen) {
-      target.set(THREE.MathUtils.clamp(pen.x + 0.26, -1.7, 1.9), 0, 0.36);  // kol (~0.58 m) tahtaya yetişsin
+      target.set(THREE.MathUtils.clamp(pen.standX + 0.26, -1.7, 1.9), 0, 0.36);  // kol (~0.58 m) tahtaya yetişsin
       faceYaw = Math.PI;
     } else if (st === "talking" && S.approach && t < S.approachUntil) {
       target.copy(S.approach);
