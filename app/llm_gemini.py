@@ -14,9 +14,10 @@ _client = None
 
 
 class GeminiError(RuntimeError):
-    def __init__(self, msg: str, quota: bool = False):
+    def __init__(self, msg: str, quota: bool = False, not_found: bool = False):
         super().__init__(msg)
         self.quota = quota
+        self.not_found = not_found
 
 
 def client():
@@ -34,8 +35,62 @@ def client():
     return _client
 
 
+_resolved: str = ""
+
+
 def _model() -> str:
-    return load_settings().get("gemini_model") or "gemini-flash-latest"
+    return load_settings().get("gemini_model") or _resolved or ""
+
+
+def pick_default(names: list[str]) -> str:
+    """Kullanılabilir modeller içinden varsayılanı seçer: kararlı, 'flash' (lite değil), en yeni sürüm."""
+    import re
+
+    def score(n: str):
+        ver = tuple(int(x) for x in re.findall(r"(\d+)", n.split("-", 2)[1] if n.count("-") >= 1 else "")[:2]) if n else ()
+        stable = not any(x in n for x in ("preview", "exp", "-latest", "tuning", "thinking"))
+        kind = 2 if ("flash" in n and "lite" not in n) else 1 if "flash" in n else 0
+        return (stable, kind, ver)
+
+    usable = [n for n in names if n.startswith("gemini")]
+    return max(usable, key=score) if usable else ""
+
+
+async def resolve_model(force: bool = False) -> str:
+    """Ayarlarda model seçilmemişse (ya da seçilen artık yoksa) anahtarın erişebildiği en uygun modeli bulur."""
+    global _resolved
+    chosen = load_settings().get("gemini_model") or ""
+    if chosen and not force:
+        return chosen
+    if _resolved and not force:
+        return _resolved
+    names = await list_models()
+    best = pick_default(names)
+    if not best:
+        raise GeminiError("Bu Gemini anahtarıyla kullanılabilir bir model bulunamadı.")
+    _resolved = best
+    if force and chosen and chosen != best:
+        from .config import save_settings
+
+        save_settings({"gemini_model": ""})  # bozuk seçimi temizle, otomatik seçime dön
+    return best
+
+
+async def _with_model(call):
+    """Modeli çözer, çağırır; model bulunamazsa (404) bir kez otomatik seçilen modelle yeniden dener."""
+    model = await resolve_model()
+    try:
+        return await call(model)
+    except Exception as e:
+        err = e if isinstance(e, GeminiError) else _err(e, model)
+        if getattr(err, "not_found", False):
+            model2 = await resolve_model(force=True)
+            if model2 != model:
+                try:
+                    return await call(model2)
+                except Exception as e2:
+                    raise (e2 if isinstance(e2, GeminiError) else _err(e2, model2)) from e2
+        raise err from e
 
 
 # ---------------------------------------------------------------- biçim dönüştürme
@@ -81,7 +136,7 @@ def system_text(system) -> str:
     return "\n\n".join(b.get("text", "") for b in system or [])
 
 
-def _err(e: Exception) -> GeminiError:
+def _err(e: Exception, model: str = "") -> GeminiError:
     code = getattr(e, "code", None) or getattr(e, "status_code", None)
     msg = str(e)
     if code == 429 or "RESOURCE_EXHAUSTED" in msg:
@@ -90,7 +145,7 @@ def _err(e: Exception) -> GeminiError:
     if code in (401, 403) or "API_KEY" in msg.upper():
         return GeminiError("Gemini anahtarı geçersiz (Ayarlar → API anahtarları).")
     if code == 404:
-        return GeminiError(f"Gemini modeli bulunamadı: {_model()}. Ayarlar'dan başka bir model seç.")
+        return GeminiError(f"Gemini modeli bulunamadı: {model or _model()}. Ayarlar'dan başka bir model seç.", not_found=True)
     return GeminiError(f"Gemini hatası: {msg[:300]}")
 
 
@@ -99,16 +154,25 @@ async def stream_text(system, messages: list[dict]) -> AsyncIterator[str]:
     from google.genai import types
 
     cfg = types.GenerateContentConfig(system_instruction=system_text(system), max_output_tokens=32000)
-    try:
-        stream = await client().aio.models.generate_content_stream(model=_model(), contents=to_contents(messages), config=cfg)
-        async for chunk in stream:
-            text = getattr(chunk, "text", None)
-            if text:
-                yield text
-    except GeminiError:
-        raise
-    except Exception as e:  # google.genai.errors.APIError ve ağ hataları
-        raise _err(e) from e
+    contents = to_contents(messages)
+    for attempt in range(2):
+        model = await resolve_model(force=attempt > 0)
+        produced = False
+        try:
+            stream = await client().aio.models.generate_content_stream(model=model, contents=contents, config=cfg)
+            async for chunk in stream:
+                text = getattr(chunk, "text", None)
+                if text:
+                    produced = True
+                    yield text
+            return
+        except GeminiError:
+            raise
+        except Exception as e:  # google.genai.errors.APIError ve ağ hataları
+            err = _err(e, model)
+            if err.not_found and not produced and attempt == 0:
+                continue  # seçili model yok: en uygun modeli bulup bir kez daha dene
+            raise err from e
 
 
 # ---------------------------------------------------------------- yapılandırılmış çıktı
@@ -122,9 +186,8 @@ async def parse(model_cls, content, system=None, max_tokens: int = 16000):
         max_output_tokens=max_tokens,
     )
     try:
-        resp = await client().aio.models.generate_content(
-            model=_model(), contents=to_contents([{"role": "user", "content": content}]), config=cfg
-        )
+        contents = to_contents([{"role": "user", "content": content}])
+        resp = await _with_model(lambda m: client().aio.models.generate_content(model=m, contents=contents, config=cfg))
     except GeminiError:
         raise
     except Exception as e:

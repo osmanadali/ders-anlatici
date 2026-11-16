@@ -21,6 +21,25 @@ from . import auth, curriculum, llm, notes, prompts, store, voice
 from .config import DATA_DIR, ROOT, load_settings, save_settings
 
 log = logging.getLogger("ders")
+
+
+def _setup_file_log() -> None:
+    """Hatalar veri/sunucu.log dosyasına yazılır (sorun olunca bu dosyayı göndermek yeterli)."""
+    from logging.handlers import RotatingFileHandler
+
+    root = logging.getLogger()
+    if any(getattr(h, "_ders", False) for h in root.handlers):
+        return
+    h = RotatingFileHandler(DATA_DIR / "sunucu.log", maxBytes=2_000_000, backupCount=2, encoding="utf-8")
+    h.setLevel(logging.WARNING)
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    h._ders = True
+    root.addHandler(h)
+    for name in ("uvicorn.error", "ders"):
+        logging.getLogger(name).addHandler(h)
+
+
+_setup_file_log()
 app = FastAPI(title="Ders Anlatıcı")
 app.middleware("http")(auth.middleware)
 STATIC = ROOT / "static"
@@ -105,6 +124,7 @@ async def llm_options():
     if gemini_key():
         try:
             out["gemini_models"] = await llm.llm_gemini.list_models()
+            out["gemini_auto"] = llm.llm_gemini.pick_default(out["gemini_models"])
         except llm.llm_gemini.GeminiError as e:
             out["gemini_error"] = str(e)
     return out
@@ -587,7 +607,11 @@ async def ask(
                 yield _sse(step)
             yield _sse({"type": "done"})
         except llm.TutorError as e:
+            log.warning("anlatım hatası: %s", e)
             yield _sse({"type": "error", "message": str(e)})
+        except Exception as e:  # beklenmeyen her hata kullanıcıya görünsün ve log'a yazılsın
+            log.exception("beklenmeyen anlatım hatası")
+            yield _sse({"type": "error", "message": f"Beklenmeyen hata: {type(e).__name__}: {e}"})
         finally:
             if final is not None:
                 assistant = {"role": "assistant", "content": final}

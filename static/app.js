@@ -73,6 +73,10 @@
     return r.headers.get("content-type")?.includes("json") ? r.json() : r;
   }
   const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  function dropEmptyBubble() {
+    if (S.tutorBubble && !S.tutorBubble.textContent.trim()) S.tutorBubble.remove();
+    S.tutorBubble = null;
+  }
   function scrollChat() { const l = $("#chatLog"); l.scrollTop = l.scrollHeight; }
   function addMsg(kind, text, att) {
     $("#chatLog .hint")?.remove();
@@ -125,6 +129,7 @@
 
     const shown = label || text || (doc_id ? `Sayfa ${page}` : "");
     addMsg("user", shown + (ctx && mode === "chat" ? `  (📄 ${ctx.label})` : ""), files.map((f) => f.name));
+    dropEmptyBubble();
     S.tutorBubble = addMsg("tutor", "");
     $("#caption").textContent = "Düşünüyor…";
     teacher.setState("thinking");
@@ -155,7 +160,11 @@
       }
     } catch (e) {
       if (e.name !== "AbortError") {
-        addMsg("err", "Hata: " + e.message);
+        dropEmptyBubble();
+        const offline = e instanceof TypeError;  // "Failed to fetch": sunucu kapalı / ulaşılamıyor
+        addMsg("err", offline
+          ? "Sunucuya ulaşılamadı. Siyah komut penceresi kapanmış olabilir: Ders Anlatici.bat ile yeniden aç. Sorun sürerse ders-anlatici/veri/sunucu.log dosyasını gönder."
+          : "Hata: " + e.message);
         $("#caption").textContent = "";
       }
     } finally {
@@ -185,7 +194,7 @@
         }
         break;
       }
-      case "error": addMsg("err", ev.message); $("#caption").textContent = ""; S.lectureActive = false; break;
+      case "error": dropEmptyBubble(); addMsg("err", ev.message); $("#caption").textContent = ""; S.lectureActive = false; break;
     }
   }
 
@@ -354,7 +363,8 @@
     S.conv = conv;
     $("#convBtn").classList.add("on"); $("#micMeter").classList.remove("hidden");
     toast("Konuşmalı ders açık. Kulaklık kullanırsan hoca kendi sesini duyup durmaz.", 5000);
-    if (!player.busy && !S.streamOpen) {
+    if (!player.busy && !S.streamOpen && S.greetedCourse !== (S.courseId || "-")) {
+      S.greetedCourse = S.courseId || "-";
       const hi = S.course ? `Merhaba! ${S.course.name} dersine hazırım. Hangi konudan başlayalım? İstediğin an sözümü kesebilirsin.`
                           : "Merhaba! Hazırım. Takıldığın yeri anlat, istediğin an sözümü kesebilirsin.";
       S.tutorBubble = addMsg("tutor", "");
@@ -843,9 +853,9 @@
     $("#setDeep").value = st.deep_solve || "auto";
     api("/api/llm-options").then((o) => {
       $("#setLlm").value = o.active;
-      $("#setGeminiModel").innerHTML = (o.gemini_models.length ? o.gemini_models : [st.gemini_model])
-        .map((m) => `<option>${m}</option>`).join("");
-      $("#setGeminiModel").value = st.gemini_model;
+      $("#setGeminiModel").innerHTML = `<option value="">Otomatik (önerilen)${o.gemini_auto ? ": " + o.gemini_auto : ""}</option>` +
+        o.gemini_models.map((m) => `<option>${m}</option>`).join("");
+      $("#setGeminiModel").value = o.gemini_models.includes(st.gemini_model) ? st.gemini_model : "";
       const miss = [!o.gemini && "GEMINI_API_KEY", !o.claude && "ANTHROPIC_API_KEY"].filter(Boolean);
       $("#llmInfo").textContent = (o.gemini_error ? "Gemini: " + o.gemini_error + " " : "") +
         (miss.length ? `.env dosyasında eksik: ${miss.join(", ")} (o seçenek çalışmaz).` : "");
@@ -945,7 +955,7 @@
       effort: $("#setEffort").value,
       tts_provider: $("#setProvider").value,
       llm_provider: $("#setLlm").value,
-      gemini_model: $("#setGeminiModel").value || S.settings.gemini_model,
+      gemini_model: $("#setGeminiModel").value,
       deep_solve: $("#setDeep").value,
       edge_voice: $("#setEdgeVoice").value || S.settings.edge_voice,
       stt_provider: $("#setStt").value,

@@ -245,3 +245,6 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .settings fieldset.keys legend { font-weight: 600; padding: 0 4px; }
 .settings fieldset.keys a { color: var(--accent); }
 .settings dialog, #settingsDlg { max-height: 92vh; }
+
+.tabs { scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }

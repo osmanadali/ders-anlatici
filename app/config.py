@@ -70,7 +70,7 @@ DEFAULTS = {
     "voice_name": "Osman Adalı",
     "tts_model": os.getenv("TTS_MODEL", "eleven_multilingual_v2"),
     "llm_provider": os.getenv("LLM_PROVIDER", ""),  # "" = otomatik (hangi anahtar varsa) | claude | gemini
-    "gemini_model": os.getenv("GEMINI_MODEL", "gemini-flash-latest"),
+    "gemini_model": os.getenv("GEMINI_MODEL", ""),  # boş = anahtarın erişebildiği en uygun Flash modeli otomatik
     "deep_solve": os.getenv("DEEP_SOLVE", "auto"),  # auto (Gemini'de açık) | on | off
     "claude_fallback": True,  # Gemini kotası dolarsa (Claude anahtarı varsa) Claude'a geç
     "claude_model": os.getenv("CLAUDE_MODEL", "claude-opus-5-5"),

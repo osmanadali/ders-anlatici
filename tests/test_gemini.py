@@ -105,3 +105,61 @@ def test_provider_auto(monkeypatch):
     assert llm.provider() == "gemini"
     monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
     assert llm.provider() == "claude"
+
+
+class _Err(Exception):
+    def __init__(self, code):
+        super().__init__(f"{code} NOT_FOUND")
+        self.code = code
+
+
+class _FakeModel:
+    def __init__(self, name):
+        self.name = "models/" + name
+        self.supported_actions = ["generateContent"]
+
+
+class _FakeAio:
+    def __init__(self, available, calls):
+        self.available, self.calls = available, calls
+
+    async def list(self):
+        async def gen():
+            for n in self.available:
+                yield _FakeModel(n)
+        return gen()
+
+    async def generate_content_stream(self, model, contents, config):
+        self.calls.append(model)
+        if model not in self.available:
+            raise _Err(404)
+
+        async def gen():
+            class C:
+                text = '{"say": "Merhaba", "board": []}\n'
+            yield C()
+        return gen()
+
+
+def test_missing_model_is_auto_replaced(monkeypatch):
+    """Kullanıcının yaşadığı hata: kayıtlı 'gemini-flash-latest' 404 → mevcut en uygun Flash modeline geç."""
+    calls = []
+    fake = type("C", (), {})()
+    fake.aio = type("A", (), {})()
+    fake.aio.models = _FakeAio(["gemini-2.5-flash-lite", "gemini-3.8-flash", "gemini-3.1-pro-preview"], calls)
+    monkeypatch.setattr(llm_gemini, "client", lambda: fake)
+    monkeypatch.setattr(llm_gemini, "_resolved", "")
+    config.save_settings({"gemini_model": "gemini-flash-latest"})
+
+    async def run():
+        return [t async for t in llm_gemini.stream_text("sistem", [{"role": "user", "content": "selam"}])]
+
+    out = asyncio.run(run())
+    assert out == ['{"say": "Merhaba", "board": []}\n']
+    assert calls == ["gemini-flash-latest", "gemini-3.8-flash"]
+    assert config.load_settings()["gemini_model"] == ""  # bozuk seçim temizlendi, otomatiğe döndü
+
+
+def test_pick_default_prefers_stable_flash():
+    assert llm_gemini.pick_default(["gemini-3.1-pro-preview", "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash"]) == "gemini-3.8-flash"
+    assert llm_gemini.pick_default(["gemini-2.5-flash-lite"]) == "gemini-2.5-flash-lite"

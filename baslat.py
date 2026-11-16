@@ -93,45 +93,48 @@ def main() -> None:
     port = free_port(int(os.getenv("PORT", "8000")))
     url = f"http://127.0.0.1:{port}/"
     server = uvicorn.Server(uvicorn.Config("app.main:app", host="127.0.0.1", port=port, log_level="warning"))
-    threading.Thread(target=server.run, daemon=True).start()
-    for _ in range(100):
-        if server.started:
-            break
-        time.sleep(0.1)
 
     tunnel, phone_file = None, ROOT / os.getenv("DATA_DIR", "veri") / "telefon.json"
-    if phone:
-        from dotenv import load_dotenv
 
-        load_dotenv(ROOT / ".env")
-        password = os.getenv("ERISIM_SIFRESI") or "-".join(secrets.choice(
-            ["kalem", "tahta", "defter", "silgi", "kitap", "sinav", "formul", "integral", "turev", "matris"]) for _ in range(2)
-        ) + str(secrets.randbelow(90) + 10)
-        tunnel, public = start_tunnel(port)
-        if public:
-            phone_file.parent.mkdir(parents=True, exist_ok=True)
-            phone_file.write_text(json.dumps({"url": public, "password": password}), "utf-8")
-            print(f"\n📱 Telefondan aç: {public}\n   Şifre: {password}\n")
-            print_qr(public)
+    def after_start() -> None:
+        nonlocal tunnel
+        for _ in range(300):
+            if server.started:
+                break
+            time.sleep(0.1)
+        if phone:
+            from dotenv import load_dotenv
 
-    browser = find_browser()
-    if browser:
-        profile = ROOT / "veri" / "pencere-profili"  # mikrofon izni bir kez verilir, hatırlanır
-        proc = subprocess.Popen([browser, f"--app={url}", f"--user-data-dir={profile}", "--window-size=1400,880",
-                                 "--autoplay-policy=no-user-gesture-required"])
-        print(f"Ders Anlatıcı açıldı: {url}  (kapatmak için pencereyi kapat)")
-        proc.wait()
-    else:
-        webbrowser.open(url)
-        print(f"Ders Anlatıcı: {url}  (kapatmak için Ctrl+C)")
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
-    server.should_exit = True
-    if tunnel:
-        tunnel.terminate()
+            load_dotenv(ROOT / ".env")
+            password = os.getenv("ERISIM_SIFRESI") or "-".join(secrets.choice(
+                ["kalem", "tahta", "defter", "silgi", "kitap", "sinav", "formul", "integral", "turev", "matris"]) for _ in range(2)
+            ) + str(secrets.randbelow(90) + 10)
+            tunnel, public = start_tunnel(port)
+            if public:
+                phone_file.parent.mkdir(parents=True, exist_ok=True)
+                phone_file.write_text(json.dumps({"url": public, "password": password}), "utf-8")
+                print(f"\n📱 Telefondan aç: {public}\n   Şifre: {password}\n")
+                print_qr(public)
+        browser = find_browser()
+        if browser:
+            profile = ROOT / "veri" / "pencere-profili"  # mikrofon izni bir kez verilir, hatırlanır
+            subprocess.Popen([browser, f"--app={url}", f"--user-data-dir={profile}", "--window-size=1400,880",
+                              "--autoplay-policy=no-user-gesture-required"])
+        else:
+            webbrowser.open(url)
+        print(f"\nDers Anlatıcı çalışıyor: {url}")
+        print("Uygulama penceresini kapatıp tekrar açmak için bu adresi tarayıcıda açabilirsin.")
+        print("TAMAMEN KAPATMAK İÇİN bu siyah pencereyi kapat (ya da Ctrl+C).\n")
+
+    threading.Thread(target=after_start, daemon=True).start()
+    # Sunucu ana iş parçacığında çalışır: uygulama penceresi başka bir işleme devredilse bile kapanmaz.
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if tunnel:
+            tunnel.terminate()
         phone_file.unlink(missing_ok=True)
 
 
