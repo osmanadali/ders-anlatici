@@ -35,7 +35,9 @@ MODELS_DIR = RUNTIME_DIR / "modeller"
 def modeller_klasoru() -> Path:
     """Ollama Windows'ta Türkçe/özel karakterli yollarda (ör. kullanıcı adında 'ı') model indirirken takılabiliyor:
     öyle bir yolda modeller sürücü kökünde ASCII bir klasöre iner."""
-    if os.name == "nt" and not str(MODELS_DIR).isascii():
+    yol = str(MODELS_DIR)
+    # OneDrive gibi eşitlenen klasörler büyük model dosyalarını kilitler ("Erişim engellendi") ve buluta yüklemeye çalışır
+    if os.name == "nt" and (not yol.isascii() or "onedrive" in yol.lower()):
         return Path(os.environ.get("SystemDrive", "C:") + "\\") / "DersAnlaticiModeller"
     return MODELS_DIR
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
