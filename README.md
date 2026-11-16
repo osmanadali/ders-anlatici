@@ -23,7 +23,15 @@ Ders notlarını öğrenen, soruları sesli (istersen **senin sesinle**, ücrets
 
 Ayrıca: hoca karakteri (sese göre ağız hareketi, yazma/dinleme/düşünme pozları), isteğe bağlı internette araştırma, hız ayarı (0.8×–1.5×), duraklat/devam (**P**), tahta sayfaları arasında gezinme, **tahtayı PDF indirme**, anlatım seviyesi (basit/normal/ileri), **hafıza**: zorlandığın konuları kaydeder, sonraki anlatımlarda ve sınavlarda bunlara ağırlık verir.
 
-## Kurulum
+## En kolay kurulum (Windows)
+
+1. Python yoksa https://www.python.org/downloads/ adresinden kur. Kurulumun ilk ekranında **"Add python.exe to PATH"** kutusunu işaretlemeyi unutma.
+2. Zip'i bir klasöre çıkar, **Kurulum.bat** dosyasına çift tıkla (ilk seferde birkaç dakika sürer).
+3. **Ders Anlatıcı.bat** dosyasına çift tıkla. Açılan Ayarlar penceresine ücretsiz Gemini anahtarını yapıştır.
+
+Mac'te aynı adımlar **Kurulum.command** ve **Ders Anlatıcı.command** ile.
+
+## Kurulum (elle)
 
 Python 3.10+ gerekir.
 
