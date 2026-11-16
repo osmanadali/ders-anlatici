@@ -1,6 +1,6 @@
 """Yerel bilgi bankası (kütüphane): kitaplar, makaleler ve ders notları bu bilgisayarda aranabilir hale gelir.
 
-- Kayıtlar SQLite'ta (veri/kutuphane/kutuphane.db, WAL). Dosyalar veri/kutuphane/dosyalar/ altında kalır,
+- Kayıtlar SQLite'ta (veri/kutuphane/kutuphane.db, WAL). Dosyalar veri/kutuphane/dosyalar/ altına alınır, öğrenilince silinir (ayar: kutuphane_dosya_sakla),
   hiçbir yere gönderilmez.
 - İçe alma: PDF (pypdf, sayfa sayfa), EPUB (zipfile + html.parser, OPF okuma sırası), TXT/MD/HTML.
 - Parçalama: ~1200 karakter, ~200 örtüşme, paragraf/cümle sınırında; her parçada başladığı sayfa.
@@ -675,6 +675,12 @@ async def _kaynak_isle(r: dict) -> None:
             except Exception:
                 c.execute("ROLLBACK")
                 raise
+        if not load_settings().get("kutuphane_dosya_sakla", False):
+            # Öğrenildi: metin ve sayfa numaraları veritabanında; kopyaya gerek yok (yer kaplamasın)
+            try:
+                (KOK / "dosyalar" / f"{kid}{r['uzanti'] or ''}").unlink(missing_ok=True)
+            except OSError as e:  # Windows'ta kilitliyse bir dahaki sefere
+                log.warning("kütüphane kopyası silinemedi: %s", e)
         n = bilgi.get("sayfa_sayisi") or 0
         boy = f"{n} sayfa" if n else f"{len(parcalar)} bölüm parçası"
         klasor.olay("kutuphane", f"📚 Kütüphaneye eklendi: {bilgi['baslik']} ({boy})")

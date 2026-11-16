@@ -42,6 +42,7 @@ Ayrıca: hoca karakteri (sese göre ağız hareketi, yazma/dinleme/düşünme po
 - **Gizlilik:** Kitapların bilgisayarından çıkmaz; Gemini yedeği açıkken bile kitap bölümleri buluta gönderilmez (o sırada cevaplar kaynaksız verilir). Literatür taramasında yalnızca makalenin başlığı, özeti ve açık erişim PDF'i iner; kişisel bilgin gönderilmez.
 - **Sınırlama:** Taranmış kitap sayfaları varsayılan olarak okunmaz. Ayarlar'dan açabilirsin, ama işlemesi yavaştır.
 
+- **Yer kaplamaz:** bir kitap öğrenildikten sonra (metni ve sayfa numaraları veritabanına yazılınca) PDF kopyası silinir; Not Kutusu/Kitaplar'a bıraktığın dosya da silinir. Hoca kitabı yine bilir ve sayfa numarasıyla kaynak gösterir. Kopyaları saklamak istersen ayar: `kutuphane_dosya_sakla`.
 - **Kitapları da kendisi bulur:** literatür taramasında derslerine uyan **serbest lisanslı (Creative Commons) ders kitaplarını** (OpenStax: istatistik, kalkülüs, fizik, ekonomi, maliyet muhasebesi, finans, yönetim, örgütsel davranış, girişimcilik, veri bilimi, Python…) indirip kütüphaneye ekler. Her taramada en fazla 2 kitap, diskte yer varsa. Telifli kitapları indirmez; onları sen eklersin. Kapatmak için ayar: `kitap_otomatik`.
 
 ### 📥 Notu tanıyıp doğru derse ekler

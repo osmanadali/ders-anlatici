@@ -299,7 +299,7 @@ def test_not_kutusu_kitaplar(kutup, monkeypatch):
     (k / "Kitaplar" / "bos.txt").write_text("", "utf-8")
     monkeypatch.setattr(klasor, "_hazir_mi", lambda f: True)
     assert asyncio.run(klasor.kitaplari_tara()) == 1
-    assert (k / "Eklendi" / "Kitaplar" / "kuyruk.txt").exists() and not (k / "Kitaplar" / "kuyruk.txt").exists()
+    assert not (k / "Kitaplar" / "kuyruk.txt").exists() and not (k / "Eklendi" / "Kitaplar" / "kuyruk.txt").exists()  # öğrenilecek; ikinci kopya tutulmaz
     assert (k / "Eklenemedi" / "bos.txt").exists()
     _isle()
     assert kutuphane.ara("Poisson")
@@ -350,3 +350,23 @@ def test_isleyici_sinyali_is_sirasinda_kaybolmaz():
 def test_gemini_iken_kaynak_bolumu_yok(monkeypatch):
     monkeypatch.setattr(llm, "provider", lambda: "gemini")
     assert llm.kaynak_limit() == 0
+
+
+def test_ogrenilen_kitabin_kopyasi_silinir(tmp_path):
+    import asyncio as _a
+
+    from app import config as _c, kutuphane as _k
+
+    k = _k.ekle_dosya("silinecek_kitap.txt", ("Talep tahmini ve stok yonetimi ekonomik siparis miktari. " * 80).encode(), "kitap")
+    kopya = _k.KOK / "dosyalar" / f"{k['id']}.txt"
+    assert kopya.exists()
+    _a.run(_k.isle_hepsi())
+    assert not kopya.exists()  # öğrenildi, kopya silindi
+    assert _k.ara("ekonomik siparis miktari")  # ama bilgi duruyor
+    _c.save_settings({"kutuphane_dosya_sakla": True})
+    try:
+        k2 = _k.ekle_dosya("saklanacak.txt", ("Montaj hatti dengeleme cevrim suresi istasyon. " * 80).encode(), "kitap")
+        _a.run(_k.isle_hepsi())
+        assert (_k.KOK / "dosyalar" / f"{k2['id']}.txt").exists()
+    finally:
+        _c.save_settings({"kutuphane_dosya_sakla": False})

@@ -215,7 +215,10 @@ async def kitaplari_tara() -> int:
                     raise
                 zaten = True  # önceki turda eklenmiş ama taşınamamış: hata sayma, taşımayı yeniden dene
             try:
-                await asyncio.to_thread(_tasi, f, kutu_yolu() / "Eklendi" / "Kitaplar")
+                if load_settings().get("kutuphane_dosya_sakla", False):
+                    await asyncio.to_thread(_tasi, f, kutu_yolu() / "Eklendi" / "Kitaplar")
+                else:  # kopyası kütüphanede; öğrenilince o da silinir, burada ikinci kopya tutma
+                    await asyncio.to_thread(f.unlink)
             except OSError:
                 if not zaten:
                     raise
