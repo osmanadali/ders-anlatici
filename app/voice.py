@@ -211,7 +211,8 @@ def _xtts(text: str) -> bytes:
             except ImportError:
                 device = "cpu"
             _xtts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-        wav = _xtts_model.tts(text=text, speaker_wav=str(VOICE_SAMPLE), language="tr", speed=1.08)
+        wav = _xtts_model.tts(text=text, speaker_wav=str(VOICE_SAMPLE), language="tr", speed=1.08,
+                                temperature=0.6, top_p=0.8, repetition_penalty=5.0)
     wav = shorten_pauses(np.asarray(wav, dtype=np.float32), 24000)
     pcm = (np.clip(wav, -1, 1) * 32767).astype("<i2").tobytes()
     buf = io.BytesIO()
@@ -223,7 +224,7 @@ def _xtts(text: str) -> bytes:
     return buf.getvalue()
 
 
-def shorten_pauses(wav, rate: int, max_pause: float = 0.35, keep: float = 0.25):
+def shorten_pauses(wav, rate: int, max_pause: float = 0.22, keep: float = 0.18):
     """XTTS cümleleri ayrı üretip arasına ~1 sn sessizlik koyuyor; uzun sessizlikleri doğal uzunluğa indirir,
     baştaki/sondaki sessizliği de kırpar."""
     import numpy as np
