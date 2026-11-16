@@ -123,7 +123,10 @@ async def post_settings(patch: dict):
 async def _warm_up():
     """Ücretsiz konuşma tanıma (Whisper) modelini açılışta arka planda hazırla (ilk seferde ~1.6 GB iner)."""
     if load_settings().get("stt_provider") == "whisper" and os.getenv("DERS_ON_YUKLEME", "1") != "0":
-        asyncio.get_running_loop().run_in_executor(None, voice.warm_whisper)
+        # arka plan iş parçacığı (daemon): indirme sürerken uygulama kapatılırsa kapanmayı engellemez
+        import threading
+
+        threading.Thread(target=voice.warm_whisper, daemon=True).start()
 
 
 LAST_PING = [0.0]  # uygulama penceresinden son "buradayım" zamanı (başlatıcı pencere kapanınca sunucuyu kapatır)

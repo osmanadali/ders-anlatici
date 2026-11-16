@@ -137,10 +137,12 @@ def _split_pdf(pdf_path: Path, out_dir: Path) -> list[dict]:
             texts.append("")
 
     pdf = pdfium.PdfDocument(str(pdf_path))
-    for i in range(len(pdf)):
-        img = pdf[i].render(scale=1.6).to_pil()
-        img.save(out_dir / f"sayfa_{i + 1:03d}.png", optimize=True)
-    pdf.close()
+    try:  # hata olsa da dosya kilidi bırakılsın (Windows'ta klasör silinebilsin)
+        for i in range(len(pdf)):
+            img = pdf[i].render(scale=1.6).to_pil()
+            img.save(out_dir / f"sayfa_{i + 1:03d}.png", optimize=True)
+    finally:
+        pdf.close()
 
     pages = []
     for i, t in enumerate(texts):

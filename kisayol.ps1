@@ -1,4 +1,5 @@
 ﻿# Masaüstüne ve Başlat menüsüne "Ders Anlatıcı" kısayolu oluşturur (siyah pencere açmadan başlar).
+$ErrorActionPreference = "Stop"
 $kok = Split-Path -Parent $MyInvocation.MyCommand.Path
 $pyw = Join-Path $kok ".venv\Scripts\pythonw.exe"
 if (-not (Test-Path $pyw)) { $pyw = (Get-Command pythonw.exe -ErrorAction SilentlyContinue).Source }

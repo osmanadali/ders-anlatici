@@ -322,7 +322,11 @@ def _whisper_model():
     model = _whisper_models.get(size)
     if model is None:
         WHISPER_STATE.update(state="hazırlanıyor", detail=size)
-        model = WhisperModel(size, device="auto", compute_type="int8")
+        try:
+            model = WhisperModel(size, device="auto", compute_type="int8")
+        except Exception as e:
+            WHISPER_STATE.update(state="hata", detail=str(e)[:300])
+            raise
         _whisper_models[size] = model
         WHISPER_STATE.update(state="hazır", detail=size)
     return model
@@ -332,8 +336,8 @@ def warm_whisper() -> None:
     try:
         with _whisper_lock:
             _whisper_model()
-    except Exception as e:  # indirme/kurulum hatası: kullanıcıya durum ekranında görünür
-        WHISPER_STATE.update(state="hata", detail=str(e)[:300])
+    except Exception:  # durum _whisper_model içinde "hata" olarak işaretlendi
+        pass
 
 
 def _whisper(audio: bytes, filename: str = "", long_form: bool = False) -> str:

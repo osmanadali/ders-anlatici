@@ -27,12 +27,13 @@
     stream: null, streamOpen: false, tutorBubble: null,
     plan: null, lectureIdx: -1, lectureActive: false,
     settings: {}, quiz: null, micPausedPlayer: false,
-    conv: null, convPaused: false,
+    conv: null, convPaused: false, recentSays: [],
   };
 
   const player = new Player(board, {
     onStep(step) {
       $("#caption").textContent = step.say || "";
+      if (step.say) { S.recentSays.push({ say: step.say, t: Date.now() }); S.recentSays = S.recentSays.slice(-4); }
       if (S.tutorBubble && step.say) {
         S.tutorBubble.textContent += (S.tutorBubble.textContent ? " " : "") + step.say;
         scrollChat();
@@ -52,7 +53,10 @@
       }).catch(() => {});
     },
     onAudio(audio) { teacher.fakeTalk = !audio || !teacher.attachAudio(audio); },
-    onSpeak(on, drawing) { if (on) { teacher.setState(drawing ? "writing" : "talking"); teacherStatus(""); } },
+    onSpeak(on, drawing) {
+      if (on) { teacher.setState(drawing ? "writing" : "talking"); teacherStatus(""); }
+      else S.lastSpeechEnd = Date.now();
+    },
     onIdle() {
       if (!S.streamOpen) {
         $("#caption").textContent = "";
@@ -337,14 +341,16 @@
     teacher.unlock();
     const hooks = {
       isTutorSpeaking: () => player.state === "playing",
-      tutorText: () => player.currentSay,
+      // Yankı olabilecek metin: yalnızca hoca konuşurken ve sustuktan sonraki 3 sn (cevaplar "tamam" vb. filtrelenmesin)
+      tutorText: () => (player.state === "playing" || Date.now() - (S.lastSpeechEnd || 0) < 3000)
+        ? [player.currentSay, ...S.recentSays.slice(-2).map((x) => x.say)].join(" ") : "",
       onSpeechStart() {
         if (player.state === "playing") { player.pause(); S.convPaused = true; }
         teacher.setState("listening");
         teacherStatus("Dinliyorum…");
       },
       onFalseStart() {
-        if (S.convPaused) { S.convPaused = false; player.resume(); }
+        if (S.convPaused) { S.convPaused = false; player.resume(); teacher.setState("talking"); teacherStatus(""); }
         else if (!player.busy) teacher.setState(S.streamOpen ? "thinking" : "listening");
       },
       onText(text) {
@@ -372,15 +378,22 @@
         m.firstElementChild.style.width = Math.round(level * 100) + "%";
         m.classList.toggle("speaking", state === "speaking");
       },
-      onFail(reason) {
-        // Tarayıcı tanıması çalışmadı → ücretsiz Whisper'a geç
-        toast(reason + " Bilgisayardaki Whisper'a geçiyorum.", 7000);
-        localSet("convStt", "whisper");
+      onFail(reason, info = {}) {
+        if (S.convPaused) { S.convPaused = false; player.resume(); }
         if (S.conv) { S.conv.stop(); S.conv = null; }
+        $("#convBtn").classList.remove("on"); $("#micMeter").classList.add("hidden");
+        if (info.permission) {  // izin sorunu Whisper ile de çözülmez
+          toast(reason + " Adres çubuğundaki/pencere başlığındaki kilit simgesinden mikrofona izin ver.", 9000);
+          teacher.setState("idle"); teacherStatus("");
+          return;
+        }
+        // Bu oturum için Whisper'a geç (kalıcı değil: sonraki açılışta tarayıcı tanıması yeniden denenir)
+        toast(reason + " Bilgisayardaki Whisper'a geçiyorum.", 7000);
+        S.convSttFallback = true;
         toggleConversation();
       },
     };
-    const useBrowser = window.BrowserConversation?.available() && localGet("convStt") !== "whisper";
+    const useBrowser = window.BrowserConversation?.available() && localGet("convStt") !== "whisper" && !S.convSttFallback;
     const conv = useBrowser ? new BrowserConversation(hooks) : new Conversation(hooks);
     try { await conv.start(); }
     catch (e) { toast("Mikrofon açılamadı: " + e.message); return; }

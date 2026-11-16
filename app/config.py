@@ -78,7 +78,8 @@ DEFAULTS = {
     "level": "normal",  # basit | normal | ileri
     "tts_enabled": True,  # eski ayar; tts_provider="browser" ile aynı anlamda
     "tts_provider": os.getenv("TTS_PROVIDER", "edge"),  # edge (ücretsiz) | xtts (ücretsiz klon) | browser | elevenlabs (ücretli, isteğe bağlı)
-    "edge_voice": "tr-TR-EmelNeural",
+    "edge_voice": "tr-TR-AhmetNeural",
+    "_ses_v2": False,  # bir kerelik ses geçişi yapıldı mı
     "stt_provider": os.getenv("STT_PROVIDER", "whisper"),  # whisper (ücretsiz) | elevenlabs (ücretli, isteğe bağlı)
     "whisper_model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),  # small = hızlı, large-v3-turbo = isabetli
     "web_search": False,  # hoca gerektiğinde internette arama yapabilsin
@@ -96,6 +97,16 @@ def load_settings() -> dict:
             pass
     if s.get("tts_enabled") is False:
         s["tts_provider"] = "browser"
+    if not s.get("_ses_v2"):
+        # Bir kerelik geçiş: klon sesi beğenilmedi → doğal hazır ses (Ahmet)
+        if s.get("tts_provider") in ("xtts", "elevenlabs") or s.get("edge_voice") == "tr-TR-EmelNeural":
+            s["tts_provider"], s["edge_voice"] = "edge", "tr-TR-AhmetNeural"
+        s["_ses_v2"] = True
+        try:
+            _SETTINGS_FILE.write_text(json.dumps({k: v for k, v in s.items() if k in DEFAULTS},
+                                                 ensure_ascii=False, indent=2), "utf-8")
+        except OSError:
+            pass
     s["tts_enabled"] = s["tts_provider"] != "browser"
     return s
 

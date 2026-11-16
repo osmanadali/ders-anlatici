@@ -169,25 +169,42 @@
             this.hooks.onLevel?.(0.8, "speaking");
             continue;
           }
+          if (!text) { this._resetSpeaking(); continue; }
           this.hooks.onLevel?.(0, "idle");
           const wasSpeaking = this.speaking;
           this.speaking = false;
-          if ((tutor || wasSpeaking) && this.isEcho(text)) { this.hooks.onFalseStart?.(); continue; }
+          // Hocanın son cümleleri (oynatma bitse de birkaç saniye) yankı sayılır: kendi sesine cevap vermesin
+          if (this.isEcho(text)) { if (wasSpeaking) this.hooks.onFalseStart?.(); continue; }
           if (norm(text).join("").length < 2) { this.hooks.onFalseStart?.(); continue; }
           this.hooks.onText?.(text);
         }
       };
       r.onerror = (e) => {
         if (e.error === "no-speech" || e.error === "aborted") return;
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") { this.active = false; this.hooks.onFail?.("Mikrofon izni verilmedi."); return; }
-        if (e.error === "network" || ++this._fails > 3) { this.active = false; this.hooks.onFail?.("Tarayıcının konuşma tanıması çalışmadı (" + e.error + ")."); }
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          this.active = false; this._resetSpeaking();
+          this.hooks.onFail?.("Mikrofon izni verilmedi.", { permission: true });
+          return;
+        }
+        if (++this._fails > 3) {  // ağ hatası dahil: birkaç kez yeniden dene, sonra Whisper'a geç
+          this.active = false; this._resetSpeaking();
+          this.hooks.onFail?.("Tarayıcının konuşma tanıması çalışmadı (" + e.error + ").", { permission: false });
+        }
       };
-      r.onend = () => { if (this.active) setTimeout(() => this._spin(), 150); };  // tarayıcı sessizlikte durdurur: yeniden başlat
+      r.onend = () => {
+        this._resetSpeaking();  // sonuç gelmeden biterse hoca "dinliyor"da takılı kalmasın
+        if (this.active) setTimeout(() => this._spin(), 150);  // tarayıcı sessizlikte durdurur: yeniden başlat
+      };
       try { r.start(); } catch (e) { setTimeout(() => this._spin(), 500); }
+    }
+
+    _resetSpeaking() {
+      if (this.speaking) { this.speaking = false; this.hooks.onLevel?.(0, "idle"); this.hooks.onFalseStart?.(); }
     }
 
     stop() {
       this.active = false;
+      this._resetSpeaking();
       try { this.rec?.abort(); } catch {}
     }
   }
