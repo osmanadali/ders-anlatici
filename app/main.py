@@ -406,6 +406,7 @@ async def get_audio(sid: str, idx: int):
         try:
             await asyncio.shield(task)
         except Exception as e:
+            log.warning("ses üretilemedi (%s): %s", load_settings().get("tts_provider"), e)
             raise HTTPException(502, f"Ses üretilemedi: {e}")
         finally:
             if task.done():
@@ -435,8 +436,9 @@ async def _cached_tts(text: str) -> FileResponse:
     if not path.exists():
         try:
             await _tts_to_file(path, text[:2500], "", "")
-        except voice.VoiceError as e:
-            raise HTTPException(502, str(e))
+        except Exception as e:
+            log.warning("ses üretilemedi (%s): %s", s.get("tts_provider"), e)
+            raise HTTPException(502, f"Ses üretilemedi: {e}")
     return _audio_response(path)
 
 
@@ -457,8 +459,9 @@ async def stt(file: UploadFile = File(...)):
     data = await file.read()
     try:
         text = await voice.listen(data, file.filename or "soru.webm", file.content_type or "audio/webm")
-    except voice.VoiceError as e:
-        raise HTTPException(502, str(e))
+    except Exception as e:
+        log.warning("konuşma yazıya çevrilemedi: %s", e)
+        raise HTTPException(502, f"Konuşma yazıya çevrilemedi: {e}")
     return {"text": text}
 
 

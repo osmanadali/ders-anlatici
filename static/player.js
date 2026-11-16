@@ -72,7 +72,7 @@
         });
         if (gen !== this.generation) return;
         if (ok && Number.isFinite(audio.duration)) durMs = audio.duration * 1000;
-        else audio = null;
+        else { this.hooks.onAudioError?.(step.audio); audio = null; }
       }
       await this._waitUnpaused(gen);
       if (gen !== this.generation) return;

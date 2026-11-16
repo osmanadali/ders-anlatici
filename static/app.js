@@ -42,6 +42,14 @@
       if (st === "idle") teacher.setState(S.streamOpen ? "thinking" : S.conv ? "listening" : "idle");
       if (st === "paused" && !S.convPaused && !S.micPausedPlayer) teacher.setState("idle");
     },
+    onAudioError(url) {
+      // Ses üretilemedi → tarayıcının robotik sesine düşüldü. Gerçek sebebi göster (bir kez).
+      if (S.audioErrShown) return;
+      S.audioErrShown = true;
+      fetch(url).then((r) => (r.ok ? null : r.json())).then((d) => {
+        if (d?.detail) toast(d.detail + " (şimdilik tarayıcı sesi kullanılıyor)", 9000);
+      }).catch(() => {});
+    },
     onAudio(audio) { teacher.fakeTalk = !audio || !teacher.attachAudio(audio); },
     onSpeak(on, drawing) { if (on) { teacher.setState(drawing ? "writing" : "talking"); teacherStatus(""); } },
     onIdle() {
