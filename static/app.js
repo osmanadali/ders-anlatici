@@ -1503,7 +1503,13 @@
   document.querySelectorAll(".ayar-nav button").forEach((b) => (b.onclick = () => ayarBolumu(b.dataset.ayar)));
   ayarBolumu(localGet("ayarBolum") || "yz");
   $("#settingsBtn").onclick = async () => {
-    await loadSettings();
+    // Pencere hemen açılsın; sunucu meşgulse (model yükleniyor, kitap dizinleniyor) son bilinen ayarlarla dolsun
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (!$("#settingsDlg").open) $("#settingsDlg").showModal();
+    try {
+      await Promise.race([loadSettings(), new Promise((_, rej) => setTimeout(() => rej(new Error("zaman aşımı")), 5000))]);
+    } catch { toast("Sunucu şu an meşgul; son bilinen ayarlar gösteriliyor.", 5000); }
+    if (!S.settings) return;
     const st = S.settings, sel = $("#setVoice");
     sel.innerHTML = `<option value="${st.voice_id}">${st.voice_name || st.voice_id}</option>`;
     $("#setTtsModel").value = st.tts_model;
@@ -1538,7 +1544,6 @@
       $("#keyEleven").placeholder = k.elevenlabs ? `kayıtlı: ${k.elevenlabs}` : "boş bırakabilirsin";
     }).catch(() => {});
     $("#setSens").value = localGet("sens") || "1";
-    $("#settingsDlg").showModal();
     if (st.tts_provider !== "elevenlabs") return;
     try {
       const voices = await api("/api/voices");
