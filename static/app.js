@@ -1024,6 +1024,20 @@
   $("#glbFlip").onclick = async () => { localSet("hocaCevir", localGet("hocaCevir") === "1" ? "0" : "1"); await reload3D(); };
   $("#glbReset").onclick = async () => { await api("/api/teacher-model", { method: "DELETE" }); $("#glbStatus").textContent = "Varsayılan hocaya dönüldü."; await reload3D(); };
 
+  // ---------------- tema: otomatik → açık → koyu
+  const THEMES = [["", "🌓", "Tema: otomatik (sistem)"], ["light", "☀️", "Tema: açık (kâğıt)"], ["dark", "🌙", "Tema: koyu (gece)"]];
+  function applyTheme(t) {
+    if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+    const [, icon, title] = THEMES.find((x) => x[0] === t) || THEMES[0];
+    $("#themeBtn").textContent = icon; $("#themeBtn").title = title;
+  }
+  applyTheme(localGet("tema") || "");
+  $("#themeBtn").onclick = () => {
+    const cur = localGet("tema") || "";
+    const next = THEMES[(THEMES.findIndex((x) => x[0] === cur) + 1) % THEMES.length][0];
+    localSet("tema", next); applyTheme(next); toast(THEMES.find((x) => x[0] === next)[2], 2000);
+  };
+
   function localGet(k) { try { return localStorage.getItem("ders." + k); } catch { return null; } }
   function localSet(k, v) { try { localStorage.setItem("ders." + k, v); } catch {} }
 

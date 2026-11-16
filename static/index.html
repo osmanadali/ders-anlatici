@@ -17,7 +17,8 @@
 <link rel="stylesheet" href="/static/style.css">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon-192.png">
-<meta name="theme-color" content="#2f6f5e">
+<meta name="theme-color" content="#2c7362">
+<script>try { const t = localStorage.getItem("ders.tema"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
 <body>
 <header class="topbar">
@@ -29,6 +30,7 @@
   <button id="convBtn" class="ghost" title="Mikrofon sürekli açık: konuşarak ders, istediğin an sözünü kes">🎧 Konuşmalı ders</button>
   <span id="micMeter" class="mic-meter hidden"><i></i></span>
   <button id="newSessionBtn" class="ghost" title="Yeni anlatım başlat">Yeni anlatım</button>
+  <button id="themeBtn" class="ghost" title="Tema: otomatik / açık / koyu">🌓</button>
   <button id="phoneBtn" class="ghost" title="Telefondan kullan">📱</button>
   <button id="settingsBtn" class="ghost" title="Ayarlar">⚙ Ayarlar</button>
 </header>

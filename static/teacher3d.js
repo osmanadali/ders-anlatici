@@ -13,7 +13,7 @@ import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer
 
 const BOARD_W = 3.2, BOARD_H = 1.92, BOARD_Y = 1.62;      // metre
 const BOARD_PX_W = 760, BOARD_PX_H = 456;                  // tahtanın HTML boyutu
-const HOME = new THREE.Vector3(1.8, 0, 1.0);               // tahtanın sağında bekleme yeri
+const HOME = new THREE.Vector3(1.85, 0, 0.9);              // tahtanın sağında bekleme yeri
 const UPPER = 0.3, FORE = 0.28;                            // kol uzunlukları
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -178,7 +178,7 @@ export function mount({ root, board, teacher2d, onError }) {
   const scene = new THREE.Scene();
   const cssScene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(36, 1.6, 0.1, 50);
-  camera.position.set(0.3, 1.55, 5.7);
+  camera.position.set(0.25, 1.6, 4.3);
 
   // duvar + tahta (HTML) — CSS3D
   const wall = document.createElement("div"); wall.className = "wall3d";
@@ -195,7 +195,12 @@ export function mount({ root, board, teacher2d, onError }) {
   sun.position.set(2.5, 5, 4); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
   Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -1, near: 0.5, far: 15 });
   scene.add(sun);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 9), new THREE.MeshStandardMaterial({ color: 0x9c7a55, roughness: 0.85 }));
+  const cssColor = (name, fallback) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 9), new THREE.MeshStandardMaterial({ color: cssColor("--floor", "#8a6e50"), roughness: 0.85 }));
+  // tema değişince zemin rengini güncelle
+  const themeObs = new MutationObserver(() => floor.material.color.set(cssColor("--floor", "#8a6e50")));
+  themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => floor.material.color.set(cssColor("--floor", "#8a6e50")));
   floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0, 4.5); floor.receiveShadow = true; scene.add(floor);
   const tray = new THREE.Mesh(new THREE.BoxGeometry(BOARD_W + 0.1, 0.04, 0.08), new THREE.MeshStandardMaterial({ color: 0x5b4a36 }));
   tray.position.set(0, BOARD_Y - BOARD_H / 2 - 0.02, 0.04); tray.castShadow = true; scene.add(tray);
@@ -340,14 +345,16 @@ export function mount({ root, board, teacher2d, onError }) {
     const head = T.head.getWorldPosition(new THREE.Vector3());
     let wantPos, wantLook;
     if (pen) {
-      wantPos = new THREE.Vector3(pen.x * 0.45 + 0.4, 1.6, 5.3);
-      wantLook = new THREE.Vector3(pen.x * 0.7, lerp(1.45, pen.y, 0.4), 0);
+      // Kamera yazılan noktanın SOLUNDAN bakar: hoca (yazının sağında durur) yazıyı kapatmaz
+      wantPos = new THREE.Vector3(pen.x - 0.55, 1.72, 4.2);
+      wantLook = new THREE.Vector3(pen.x + 0.05, lerp(1.5, pen.y, 0.4), 0);
     } else if (S.approach && st === "talking") {
-      wantPos = new THREE.Vector3(pos.x * 0.4 + 0.2, 1.62, 5.6);
+      wantPos = new THREE.Vector3(pos.x * 0.4 + 0.2, 1.62, 4.4);
       wantLook = new THREE.Vector3(pos.x * 0.6, lerp(1.4, head.y, 0.5), pos.z * 0.6);
     } else {
-      wantPos = new THREE.Vector3(0.5, 1.55, 5.9);
-      wantLook = new THREE.Vector3(0.4, 1.4, 0);
+      // tahta ekranı doldursun (yakın kadraj), hoca sağda görünür kalsın
+      wantPos = new THREE.Vector3(0.25, 1.6, 4.3);
+      wantLook = new THREE.Vector3(0.2, 1.5, 0);
     }
     wantPos.x += Math.sin(t * 0.31) * 0.05; wantPos.y += Math.sin(t * 0.43) * 0.025;  // elde tutulmuş hafif salınım
     camPos.lerp(wantPos, 1 - Math.exp(-1.6 * dt));
@@ -365,7 +372,7 @@ export function mount({ root, board, teacher2d, onError }) {
     if (!w || !h) return;
     camera.aspect = w / h;
     // dar ekranda (telefon) biraz geri çekil ki tahta sığsın
-    camera.fov = w / h < 1.1 ? 52 : 36;
+    camera.fov = w / h < 1.1 ? 58 : 38;
     camera.updateProjectionMatrix();
     gl.setSize(w, h); css.setSize(w, h);
   }
