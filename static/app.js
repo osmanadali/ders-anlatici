@@ -76,8 +76,25 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(() => t.classList.add("hidden"), ms);
   }
+  // Sunucuya ulaşılamıyorsa (başlatılıyor / güncelleniyor) üstte bant göster, hazır olunca sayfayı yenile
+  let baglantiYok = false;
+  function baglantiKoptu() {
+    if (baglantiYok) return;
+    baglantiYok = true;
+    const b = document.createElement("div");
+    b.id = "baglantiBandi";
+    b.textContent = "⏳ Uygulama başlatılıyor ya da güncelleniyor… Hazır olunca sayfa kendiliğinden yenilenecek (ilk açılışta birkaç dakika sürebilir).";
+    document.body.prepend(b);
+    const yokla = async () => {
+      try { if ((await fetch("/api/status", { cache: "no-store" })).ok) return location.reload(); } catch {}
+      setTimeout(yokla, 3000);
+    };
+    setTimeout(yokla, 3000);
+  }
   async function api(path, opts = {}) {
-    const r = await fetch(path, opts);
+    let r;
+    try { r = await fetch(path, opts); }
+    catch (e) { baglantiKoptu(); throw new Error("Sunucu henüz hazır değil (başlatılıyor ya da güncelleniyor)."); }
     if (!r.ok) {
       let msg = r.statusText;
       try { msg = (await r.json()).detail || msg; } catch {}

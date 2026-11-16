@@ -136,3 +136,6 @@ dialog { border-radius: 20px !important; border: 1px solid var(--line); backgrou
   .board-bar { bottom: 8px; max-width: calc(100% - 16px); overflow-x: auto; }
   .board-bar .caption { display: none; }
 }
+
+#baglantiBandi { position: fixed; top: 0; left: 0; right: 0; z-index: 2000; padding: 10px 16px; text-align: center; font-weight: 600;
+  background: var(--grad); color: #fff; box-shadow: var(--shadow-lg); }
