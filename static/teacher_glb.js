@@ -86,7 +86,7 @@ function aim(bone, child, worldPoint, k = 1) {
 }
 
 // İki kemikli IK: omuz→dirsek→el (ya da kalça→diz→ayak); pole: dirseğin/dizin gideceği yön (dünya)
-function twoBone(a, b, c, target, pole, k = 0.35) {
+function twoBone(a, b, c, target, pole, k = 0.35, keep = null) {
   const A = a.getWorldPosition(new THREE.Vector3());
   const la = a.userData.len || (a.userData.len = A.distanceTo(b.getWorldPosition(new THREE.Vector3())));
   const lb = b.userData.len || (b.userData.len = b.getWorldPosition(new THREE.Vector3()).distanceTo(c.getWorldPosition(new THREE.Vector3())));
@@ -96,7 +96,11 @@ function twoBone(a, b, c, target, pole, k = 0.35) {
   const pv = pole.clone().sub(dir.clone().multiplyScalar(pole.dot(dir)));
   if (pv.lengthSq() < 1e-6) pv.set(0, -1, 0); else pv.normalize();
   const cosA = THREE.MathUtils.clamp((la * la + d * d - lb * lb) / (2 * la * d), -1, 1);
-  const elbow = A.clone().addScaledVector(dir, la * cosA).addScaledVector(pv, la * Math.sqrt(1 - cosA * cosA));
+  let elbow = A.clone().addScaledVector(dir, la * cosA).addScaledVector(pv, la * Math.sqrt(1 - cosA * cosA));
+  if (keep) {  // dirsek gövdeye girmesin: dışarı it, kol uzunluğunu koru
+    elbow = keep(elbow);
+    elbow = A.clone().add(elbow.sub(A).setLength(la));
+  }
   aim(a, b, elbow, k);
   aim(b, c, A.clone().addScaledVector(dir, d), k);
 }
@@ -163,6 +167,17 @@ export async function loadGlbRig(url, { flip = false } = {}) {
 
   function rootDir(x, y, z) { return new THREE.Vector3(x, y, z).applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion())); }
   function shoulderPos(side) { return B[side].upper.getWorldPosition(new THREE.Vector3()); }
+  // Gövde kapsülü (dünya): kalça → göğüs ekseni; yarıçaplar omuz ve kalça eklem aralığından
+  function govdeKapsulu() {
+    const wp = (o) => o.getWorldPosition(new THREE.Vector3());
+    const sL = wp(B.L.upper), sR = wp(B.R.upper);
+    const gogus = sL.clone().add(sR).multiplyScalar(0.5).addScaledVector(rootDir(0, 1, 0), -0.06);
+    const kalca = B.hips ? wp(B.hips) : gogus.clone().addScaledVector(rootDir(0, 1, 0), -0.45);
+    const omuz = sL.distanceTo(sR);
+    const kalcaG = (B.L.thigh && B.R.thigh) ? wp(B.L.thigh).distanceTo(wp(B.R.thigh)) : omuz * 0.6;
+    return { alt: kalca.addScaledVector(rootDir(0, 1, 0), -0.12), ust: gogus,
+             rGogus: omuz * 0.42, rKalca: Math.max(kalcaG * 0.5 + 0.1, omuz * 0.45) };
+  }
 
   const debug = { B, last: null };
   return {
@@ -191,18 +206,37 @@ export async function loadGlbRig(url, { flip = false } = {}) {
       // kollar
       const relaxTarget = (side, g, swing) => {
         const sx = side === "L" ? 1 : -1;  // modelin solu karakterin +X'i (kameraya bakarken ekranın sağı)
-        return shoulderPos(side).add(rootDir(sx * (0.07 + g * 0.1), -0.555 + g * 0.3, 0.04 + g * 0.28 + swing * sx * -0.15));
+        return shoulderPos(side).add(rootDir(sx * (0.11 + g * 0.1), -0.53 + g * 0.3, 0.07 + g * 0.28 + swing * sx * -0.15));
+      };
+      // Basit fizik: gövde bir kapsül; el ve dirsek hedefi içine düşerse yüzeyine itilir (içinden geçmez)
+      const govde = govdeKapsulu();
+      const disari = (pt) => {
+        const ax = govde.alt, ust = govde.ust;
+        const yon = ust.clone().sub(ax), uz = yon.length(); yon.normalize();
+        const t = THREE.MathUtils.clamp(pt.clone().sub(ax).dot(yon), 0, uz);
+        const merkez = ax.clone().addScaledVector(yon, t);
+        const fark = pt.clone().sub(merkez);
+        // yarıçap: kalça hizasında daha geniş (ceket/kalça), göğüste omuz genişliğine göre
+        const r = THREE.MathUtils.lerp(govde.rKalca, govde.rGogus, t / uz) + 0.035;
+        const d = fark.length();
+        if (d >= r) return pt;
+        if (d < 1e-4) fark.copy(rootDir(1, 0, 0)); 
+        return merkez.add(fark.setLength(r));
+      };
+      const kol = (side, target, pole, k) => {
+        const L = B[side];
+        twoBone(L.upper, L.fore, L.hand, disari(target), pole, k, disari);
       };
       if (p.reachR) {
-        twoBone(B.R.upper, B.R.fore, B.R.hand, p.reachR, rootDir(0.3, -1, -0.5), 0.4);
-        twoBone(B.L.upper, B.L.fore, B.L.hand, relaxTarget("L", 0, 0), rootDir(0, -0.3, -1), 0.15);
+        kol("R", p.reachR, rootDir(0.3, -1, -0.5), 0.4);
+        kol("L", relaxTarget("L", 0, 0), rootDir(0, -0.3, -1), 0.15);
       } else if (p.think) {
         const chin = headObj.getWorldPosition(new THREE.Vector3()).add(rootDir(-0.02, -0.08, 0.12));
-        twoBone(B.R.upper, B.R.fore, B.R.hand, chin, rootDir(0.2, -1, 0.2), 0.25);
-        twoBone(B.L.upper, B.L.fore, B.L.hand, relaxTarget("L", 0, 0), rootDir(0, -0.3, -1), 0.15);
+        kol("R", chin, rootDir(0.2, -1, 0.2), 0.25);
+        kol("L", relaxTarget("L", 0, 0), rootDir(0, -0.3, -1), 0.15);
       } else {
-        twoBone(B.R.upper, B.R.fore, B.R.hand, relaxTarget("R", p.talkR, p.swing), rootDir(0, -0.3, -1), 0.15);
-        twoBone(B.L.upper, B.L.fore, B.L.hand, relaxTarget("L", p.talkL, p.swing), rootDir(0, -0.3, -1), 0.15);
+        kol("R", relaxTarget("R", p.talkR, p.swing), rootDir(0, -0.3, -1), 0.15);
+        kol("L", relaxTarget("L", p.talkL, p.swing), rootDir(0, -0.3, -1), 0.15);
       }
 
       // ağız ve göz kırpma (şekil anahtarı varsa); yoksa konuşurken başı hafifçe sallanır
