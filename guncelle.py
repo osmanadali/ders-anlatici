@@ -73,7 +73,9 @@ def _get(url: str, timeout: float) -> bytes:
 
 
 def latest_commit() -> tuple[str, str]:
-    d = json.loads(_get(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}", 8))
+    from urllib.parse import quote
+
+    d = json.loads(_get(f"https://api.github.com/repos/{REPO}/commits/{quote(BRANCH, safe='')}", 8))
     return d["sha"], (d.get("commit", {}).get("message") or "").splitlines()[0]
 
 
