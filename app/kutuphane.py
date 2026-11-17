@@ -39,7 +39,7 @@ log = logging.getLogger("ders.kutuphane")
 
 KOK = DATA_DIR / "kutuphane"
 UZANTILAR = {".pdf", ".epub", ".txt", ".md", ".html", ".htm"}
-TURLER = {"kitap", "makale", "ders_notu", "diger"}
+TURLER = {"kitap", "makale", "ders_notu", "diger", "haber"}
 MAX_BOYUT = 300 * 2**20
 PARCA_BOY, ORTUSME, EN_KISA = 1200, 200, 150
 TOPLU = 16  # gömme isteği başına parça
@@ -522,11 +522,13 @@ def ekle_makale(meta: dict, tam_metin: str | None = None) -> dict | None:
     if not isinstance(dersler, list):
         dersler = ders_etiketle(govde, baslik)
     kid = _yeni_id()
+    tur = meta.get("tur") if meta.get("tur") in TURLER else "makale"
     with _kilit:
         c = _db()
         if doi and c.execute("SELECT 1 FROM kaynaklar WHERE doi=?", (doi,)).fetchone():
             return None
-        sha = hashlib.sha256((doi or (baslik + yazar)).encode()).hexdigest()
+        kimlik = (meta.get("kimlik") or "").strip()  # DOI'si olmayan kaynaklar (haber, Vikipedi) için kalıcı kimlik: url vb.
+        sha = hashlib.sha256((doi or kimlik or (baslik + yazar)).encode()).hexdigest()
         if c.execute("SELECT 1 FROM kaynaklar WHERE sha256=?", (sha,)).fetchone():
             return None
         c.execute("BEGIN")
@@ -534,7 +536,7 @@ def ekle_makale(meta: dict, tam_metin: str | None = None) -> dict | None:
             c.execute("INSERT INTO kaynaklar (id, baslik, yazar, yil, tur, dil, dosya, url, doi, sha256, eklenme, durum,"
                       " hata, dersler, dergi, ozet, parca_sayisi) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (kid, baslik, yazar, meta.get("yil") if isinstance(meta.get("yil"), int) else _yil(meta.get("yil")),
-                       "makale", meta.get("dil") or "", "", meta.get("url") or "", doi, sha, time.time(), "hazir", "",
+                       tur, meta.get("dil") or "", "", meta.get("url") or "", doi, sha, time.time(), "hazir", "",
                        json.dumps(dersler, ensure_ascii=False), meta.get("dergi") or "", ozet, len(parcalar)))
             _parcalari_yaz(c, kid, parcalar)
             c.execute("COMMIT")
@@ -1056,6 +1058,22 @@ def rastgele_parcalar(n: int = 30, en_az: int = 300) -> list[dict]:
             "WHERE k.durum='hazir' AND length(p.metin) >= ? ORDER BY RANDOM() LIMIT ?", (en_az, n)).fetchall()
     return [{"id": r["id"], "sayfa": r["sayfa"], "metin": r["metin"], "baslik": r["baslik"],
              "dersler": json.loads(r["dersler"] or "[]")} for r in rows]
+
+
+def son_eklenenler(gun: int = 7, turler: tuple[str, ...] = ("makale", "haber"), limit: int = 40) -> list[dict]:
+    """Son `gun` günde eklenen hazır kaynaklar (yeni önce): id, baslik, yazar, yil, tur, url, ozet, eklenme."""
+    esik = time.time() - gun * 86400
+    yer = ",".join("?" * len(turler))
+    with _kilit:
+        rows = _db().execute(
+            f"SELECT id, baslik, yazar, yil, tur, url, ozet, dersler, eklenme FROM kaynaklar WHERE durum='hazir' "
+            f"AND eklenme>=? AND tur IN ({yer}) ORDER BY eklenme DESC LIMIT ?", (esik, *turler, limit)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["dersler"] = json.loads(d.get("dersler") or "[]")
+        out.append(d)
+    return out
 
 
 def atif(s: dict) -> str:

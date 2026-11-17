@@ -196,6 +196,7 @@ async def _warm_up():
     # Masaüstündeki "Not Kutusu" ve İndirilenler'deki ders paketleri kendiliğinden içe aktarılır
     if os.getenv("DERS_ON_YUKLEME", "1") != "0":
         klasor.baslat(otomatik_ekle)
+    if os.getenv("DERS_ON_YUKLEME", "1") != "0": from . import guncel as _guncel; _guncel.zamanlayici_baslat()  # sektör haberleri, bülten, Vikipedi
 
 
 @app.on_event("shutdown")
@@ -1337,3 +1338,8 @@ async def manifest():
 @app.get("/favicon.ico")
 async def favicon():
     return Response(status_code=204)
+
+
+from . import guncel as _guncel_modulu  # noqa: E402
+
+app.include_router(_guncel_modulu.router)
