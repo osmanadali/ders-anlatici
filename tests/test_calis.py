@@ -1,5 +1,7 @@
 """Çalış sekmesi: hatalar, kartlar + aralıklı tekrar, simülasyon, hesap + Excel/Python, özet kartı."""
+import asyncio
 import io
+import json
 import subprocess
 import sys
 from datetime import date, timedelta
@@ -20,6 +22,8 @@ def client(monkeypatch):
     for ad in ("hatalar.json", "kartlar.json", "simulasyon.json"):
         calis._yol(ad).unlink(missing_ok=True)
     monkeypatch.setattr(llm, "ai_hazir", lambda: False)
+    calis._OZET_ONBELLEK.clear()
+    calis._OZET_KILITLERI.clear()
     with TestClient(main.app) as c:
         yield c
 
@@ -265,4 +269,138 @@ def test_ozet_karti_yapay_zekali(client, monkeypatch):
         raise llm.TutorError("yok")
 
     monkeypatch.setattr(llm, "_parse", patla)  # yapay zeka hata verirse yedeğe düşer
+    calis._OZET_ONBELLEK.clear()
     assert client.post("/api/calis/ozet-karti", json={"session_id": sid}).json()["kaynak"] == "kural"
+
+
+def test_ozet_karti_sira_zaman_asimi_kurala_duser_ve_onbellekler(client, monkeypatch):
+    sid = _oturum(_ders())
+    monkeypatch.setattr(llm, "ai_hazir", lambda: True)
+    monkeypatch.setattr(calis, "OZET_SIRA_SN", 0.05)
+    cagri = {"sira": 0, "parse": 0}
+
+    async def takili():
+        cagri["sira"] += 1
+        await asyncio.sleep(30)
+
+    async def parse(*a, **k):
+        cagri["parse"] += 1
+        raise AssertionError("sıra dolmadan yapay zeka çağrılmamalı")
+
+    monkeypatch.setattr(llm, "arka_plan_sirasi", takili)
+    monkeypatch.setattr(llm, "_parse", parse)
+    r = client.post("/api/calis/ozet-karti", json={"session_id": sid}).json()
+    assert r["kaynak"] == "kural" and cagri["parse"] == 0
+    # aynı (oturum, timeline uzunluğu) için ikinci istek önbellekten gelir
+    assert client.post("/api/calis/ozet-karti", json={"session_id": sid}).json() == r
+    assert cagri["sira"] == 1
+
+
+def test_ozet_karti_es_zamanli_istekler_tek_uretim(client, monkeypatch):
+    sid = _oturum(_ders())
+    monkeypatch.setattr(llm, "ai_hazir", lambda: True)
+    n = {"c": 0}
+
+    async def sira():
+        return None
+
+    async def parse(model, content, system=None, effort=None, max_tokens=0):
+        n["c"] += 1
+        await asyncio.sleep(0.2)
+        return calis.OzetKarti(baslik="K", anahtar_kavramlar=[], formuller=[], ozet_maddeleri=["m"], kontrol_sorusu="q", cevap="a")
+
+    monkeypatch.setattr(llm, "arka_plan_sirasi", sira)
+    monkeypatch.setattr(llm, "_parse", parse)
+
+    async def calistir():
+        import httpx
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://t") as c:
+            return await asyncio.gather(*[c.post("/api/calis/ozet-karti", json={"session_id": sid}) for _ in range(3)])
+
+    sonuc = asyncio.run(calistir())
+    assert all(r.status_code == 200 and r.json()["baslik"] == "K" for r in sonuc)
+    assert n["c"] == 1
+
+
+# ---------------------------------------------------------------- CPM geri geçiş sırası
+def test_cpm_python_sifir_sureli_tas_ve_esit_ef():
+    g = {"faaliyetler": [
+        {"ad": "A", "sure": 3, "onculler": []},
+        {"ad": "KT", "sure": 0, "onculler": ["A"]},       # 0 süreli kilometre taşı: EF eşitliği
+        {"ad": "B", "sure": 4, "onculler": ["KT"]},
+        {"ad": "C", "sure": 2, "onculler": ["KT"]},
+        {"ad": "D", "sure": 1, "onculler": ["B", "C"]},
+    ]}
+    s = hesap.calistir("cpm", g)
+    cikti = _calistir(calis_dosya.python_uret("cpm", g, s))
+    assert f"Proje süresi = {s.sayilar['proje_suresi']:.2f}" in cikti
+    satirlar = {l.split(":")[0]: l for l in cikti.splitlines() if "bolluk" in l}
+    assert "LS 3.00 LF 3.00 bolluk 0.00" in satirlar["KT"]
+    assert "LS 5.00 LF 7.00 bolluk 2.00" in satirlar["C"]
+
+
+# ---------------------------------------------------------------- hesap uçları (iş parçacığı + süre sınırı)
+def test_hesap_ucu_zaman_asimi_504(client, monkeypatch):
+    import time as _t
+    monkeypatch.setattr(calis, "HESAP_SURE_SN", 0.1)
+    monkeypatch.setattr(hesap, "calistir", lambda ad, g: (_t.sleep(0.5), None)[1])
+    r = client.post("/api/calis/hesap", json={"arac": "eoq", "girdi": {}})
+    assert r.status_code == 504 and "saniyede bitmedi" in r.json()["detail"]
+    r = client.post("/api/calis/indir/xlsx", json={"arac": "eoq", "girdi": {}})
+    assert r.status_code == 504
+
+
+# ---------------------------------------------------------------- simülasyon: bankadan 30 soru
+def test_banka_sorulari_20den_fazla(monkeypatch):
+    c = {"id": "d1", "name": "Kalite"}
+    kayitlar = [{"dogrulandi": True, "ders_id": "d1", "tur": "coktan", "soru": f"s{i}", "siklar": ["a", "b", "c"], "cevap": "b",
+                 "kaynak": {"baslik": "Kitap", "sayfa": i}} for i in range(35)]
+    monkeypatch.setattr(calisma_mod(), "banka", lambda: kayitlar)
+    assert len(calis.banka_sorulari(c, 30)) == 30
+    q = calis.banka_sorulari(c, 5)[0]
+    assert q["tur"] == "coktan" and q["siklar"][ord(q["dogru"]) - 65] == "b"
+
+
+def calisma_mod():
+    from app import calisma
+    return calisma
+
+
+# ---------------------------------------------------------------- depolama: bozuk / okunamayan dosya
+def test_oku_bozuk_dosya_yedeklenir_ve_bos_doner(client):
+    p = calis._yol("hatalar.json")
+    p.write_text("{bozuk", "utf-8")
+    assert calis._oku("hatalar.json", []) == []
+    assert not p.exists()
+    yedekler = list(p.parent.glob("hatalar.json.bozuk-*"))
+    assert len(yedekler) == 1 and yedekler[0].read_text("utf-8") == "{bozuk"
+    assert calis._oku("yok.json", {"x": 1}) == {"x": 1}  # dosya yoksa varsayılan
+
+
+def test_oku_gecici_oserror_yeniden_dener_sonra_503(client, monkeypatch):
+    from pathlib import Path
+    p = calis._yol("hatalar.json")
+    p.write_text("[1]", "utf-8")
+    gercek = Path.read_text
+    n = {"c": 0}
+
+    def sahte(self, *a, **k):
+        if self.name == "hatalar.json":
+            n["c"] += 1
+            if n["c"] < 3:
+                raise PermissionError("geçici")
+        return gercek(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", sahte)
+    assert calis._oku("hatalar.json", []) == [1] and n["c"] == 3
+
+    def hep(self, *a, **k):
+        if self.name == "hatalar.json":
+            raise PermissionError("kalıcı")
+        return gercek(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", hep)
+    r = client.get("/api/calis/hatalar?course_id=")
+    assert r.status_code == 503 and "okunam" in r.json()["detail"]
+    monkeypatch.setattr(Path, "read_text", gercek)
+    assert json.loads(p.read_text("utf-8")) == [1]  # dosya ezilmedi

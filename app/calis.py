@@ -7,6 +7,7 @@ tekrar durumu saklanır. Hata analizi ve özet kartı yapay zekayla yapılır, y
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -40,11 +41,36 @@ def _yol(ad: str):
     return d / ad
 
 
+class DepoHatasi(HTTPException):
+    """Veri dosyası okunamadı (geçici G/Ç hatası); yazarak ezmemek için yükseltilir (uç noktada 503)."""
+
+    def __init__(self, ayrinti: str):
+        super().__init__(503, "Veri dosyası şu an okunamıyor, biraz sonra tekrar dene.")
+        self.log_ayrinti = ayrinti
+
+
 def _oku(ad: str, varsayilan):
-    try:
-        return json.loads(_yol(ad).read_text("utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return varsayilan
+    p = _yol(ad)
+    son = None
+    for deneme in range(3):
+        try:
+            return json.loads(p.read_text("utf-8"))
+        except FileNotFoundError:
+            return varsayilan
+        except json.JSONDecodeError as e:
+            yedek = p.with_name(f"{p.name}.bozuk-{time.strftime('%Y%m%d-%H%M%S')}")
+            try:
+                p.replace(yedek)
+            except OSError:
+                pass
+            log.error("%s bozuk (%s); %s olarak yedeklendi, boş devam ediliyor", ad, e, yedek.name)
+            return varsayilan
+        except OSError as e:
+            son = e
+            if deneme < 2:
+                time.sleep(0.1)
+    log.error("%s okunamadı: %s", ad, son)
+    raise DepoHatasi(f"{ad} okunamadı: {son}")
 
 
 def _yaz(ad: str, veri) -> None:
@@ -390,16 +416,23 @@ def deneme_sorulari(x: dict, ders_adi: str = "") -> list[dict]:
 
 
 def banka_sorulari(course: dict, n: int) -> list[dict]:
+    """Bankadan doğrudan n soru (calisma.quiz_sorulari 20 ile sınırlı olduğu için burada kendimiz örnekleriz)."""
+    uygun = [r for r in calisma.banka() if calisma._uygun(r, course, False)]
+    random.shuffle(uygun)
     out = []
-    for q in calisma.quiz_sorulari(course, n)["questions"]:
-        konu = q.get("topic") or "Soru bankası"
-        if q["kind"] == "coktan_secmeli" and q["choices"] and q["answer"] in q["choices"]:
-            i = q["choices"].index(q["answer"])
-            out.append({"tur": "coktan", "soru": q["question"], "siklar": q["choices"], "dogru": "ABCDE"[i], "cevap_metni": f"{'ABCDE'[i]}) {q['answer']}",
-                        "konu": konu, "kaynak": q.get("page", ""), "aciklama": "", "metin": "", "bolum": "Soru bankası"})
+    for r in uygun[: max(1, min(int(n), 100))]:
+        k = r.get("kaynak") or {}
+        konu = k.get("baslik", "") or "Soru bankası"
+        kaynak = f"{k.get('baslik', '')} s.{k['sayfa']}" if k.get("sayfa") else ""
+        siklar = list(r.get("siklar") or []) if r.get("tur") == "coktan" else []
+        if siklar and r.get("cevap") in siklar:
+            random.shuffle(siklar)
+            i = siklar.index(r["cevap"])
+            out.append({"tur": "coktan", "soru": r["soru"], "siklar": siklar, "dogru": "ABCDE"[i], "cevap_metni": f"{'ABCDE'[i]}) {r['cevap']}",
+                        "konu": konu, "kaynak": kaynak, "aciklama": "", "metin": "", "bolum": "Soru bankası"})
         else:
-            out.append({"tur": "acik", "soru": q["question"], "siklar": [], "dogru": "", "cevap_metni": q["answer"], "konu": konu,
-                        "kaynak": q.get("page", ""), "aciklama": "", "metin": "", "bolum": "Soru bankası"})
+            out.append({"tur": "acik", "soru": r["soru"], "siklar": [], "dogru": "", "cevap_metni": r.get("cevap", ""), "konu": konu,
+                        "kaynak": kaynak, "aciklama": "", "metin": "", "bolum": "Soru bankası"})
     return out
 
 
@@ -529,6 +562,9 @@ class HesapIstek(BaseModel):
     girdi: dict | str = Field(default_factory=dict)
 
 
+HESAP_SURE_SN = 30
+
+
 def _coz(g: HesapIstek) -> hesap.Sonuc:
     try:
         return hesap.calistir(g.arac, g.girdi)
@@ -536,27 +572,45 @@ def _coz(g: HesapIstek) -> hesap.Sonuc:
         raise HTTPException(400, str(e))
 
 
+async def _coz_async(g: HesapIstek) -> hesap.Sonuc:
+    """CPU ağır çözücüyü olay döngüsünü tıkamadan iş parçacığında, süre sınırıyla çalıştırır."""
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_coz, g), HESAP_SURE_SN)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, f"Hesap {HESAP_SURE_SN} saniyede bitmedi; girdiyi küçültüp tekrar dene.")
+
+
 @router.post("/hesap")
 async def hesap_coz(g: HesapIstek):
-    s = _coz(g)
+    s = await _coz_async(g)
     return {**s.model_dump(), "metin": hesap.sonuc_metni(s)}
 
 
 _MIME = {"xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "py": "text/x-python; charset=utf-8"}
 
 
-def _dosya_yanit(bicim: str, g: HesapIstek) -> Response:
+def _dosya_uret(bicim: str, g: HesapIstek) -> bytes:
+    s = _coz(g)
+    try:
+        girdi = g.girdi if isinstance(g.girdi, dict) else json.loads(g.girdi)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "girdi geçerli JSON değil")
+    return calis_dosya.excel_uret(g.arac, girdi, s) if bicim == "xlsx" else calis_dosya.python_uret(g.arac, girdi, s).encode("utf-8")
+
+
+async def _dosya_yanit(bicim: str, g: HesapIstek) -> Response:
     if bicim not in _MIME:
         raise HTTPException(404, "Biçim: xlsx ya da py")
-    s = _coz(g)
-    girdi = g.girdi if isinstance(g.girdi, dict) else json.loads(g.girdi)
-    veri = calis_dosya.excel_uret(g.arac, girdi, s) if bicim == "xlsx" else calis_dosya.python_uret(g.arac, girdi, s).encode("utf-8")
+    try:
+        veri = await asyncio.wait_for(asyncio.to_thread(_dosya_uret, bicim, g), HESAP_SURE_SN)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, f"Hesap {HESAP_SURE_SN} saniyede bitmedi; girdiyi küçültüp tekrar dene.")
     return Response(veri, media_type=_MIME[bicim], headers={"Content-Disposition": f'attachment; filename="{g.arac}.{bicim}"'})
 
 
 @router.post("/indir/{bicim}")
 async def indir_post(bicim: str, g: HesapIstek):
-    return _dosya_yanit(bicim, g)
+    return await _dosya_yanit(bicim, g)
 
 
 @router.get("/indir/{bicim}")
@@ -565,7 +619,7 @@ async def indir_get(bicim: str, arac: str, girdi: str = "{}"):
         gj = json.loads(girdi)
     except json.JSONDecodeError:
         raise HTTPException(400, "girdi geçerli JSON değil")
-    return _dosya_yanit(bicim, HesapIstek(arac=arac, girdi=gj))
+    return await _dosya_yanit(bicim, HesapIstek(arac=arac, girdi=gj))
 
 
 # ================================================================ 5) DERS SONRASI ÖZET KARTI
@@ -623,14 +677,29 @@ def kural_ozet(s: dict, o: dict | None = None) -> dict:
     return {"baslik": baslik, "anahtar_kavramlar": kav, "formuller": formul, "ozet_maddeleri": madde, "kontrol_sorusu": soru, "cevap": cevap}
 
 
+_OZET_ONBELLEK: dict[tuple[str, int], dict] = {}
+_OZET_KILITLERI: dict[str, asyncio.Lock] = {}
+OZET_SIRA_SN = 12
+
+
 @router.post("/ozet-karti")
 async def ozet_karti(g: OzetIstek):
+    # aynı oturum için istekler sırayla çalışır; ikincisi ilkinin önbelleğe yazdığı sonucu alır
+    kilit = _OZET_KILITLERI.setdefault(g.session_id, asyncio.Lock())
+    async with kilit:
+        return await _ozet_karti(g)
+
+
+async def _ozet_karti(g: OzetIstek):
     try:
         s = store.load_session(g.session_id)
     except ValueError:
         s = None
     if not s:
         raise HTTPException(404, "Oturum bulunamadı")
+    anahtar = (g.session_id, len(s.get("timeline", [])))
+    if anahtar in _OZET_ONBELLEK:
+        return _OZET_ONBELLEK[anahtar]
     o = _oturum_ozeti(s)
     if not (o["basliklar"] or o["yazilar"] or o["matlar"] or o["soylenen"]):
         raise HTTPException(400, "Bu oturumda henüz anlatım yok")
@@ -641,11 +710,20 @@ async def ozet_karti(g: OzetIstek):
                  "\nTahtadaki yazılar: " + " | ".join(o["yazilar"][:25]) + "\nFormüller: " + " ; ".join(o["matlar"][:15]) +
                  "\nHocanın anlattıkları: " + " ".join(o["soylenen"])[:3500])
         try:
-            await llm.arka_plan_sirasi()
+            try:
+                await asyncio.wait_for(llm.arka_plan_sirasi(), OZET_SIRA_SN)
+            except asyncio.TimeoutError:
+                raise RuntimeError("yapay zeka sırası dolu (zaman aşımı)")
             k = await llm._parse(OzetKarti, metin[:7000], "Sen öğrencinin ders notlarını toparlayan titiz bir asistansın. Türkçe yaz.", max_tokens=1500)
             kart, kaynak = k.model_dump(), "yapay_zeka"
         except Exception as e:
             log.info("özet kartı yapay zekayla üretilemedi, kural tabanlı: %s", e)
     if kart is None:
         kart = kural_ozet(s, o)
-    return {**kart, "kaynak": kaynak, "course_id": s.get("course_id") or "", "session_id": g.session_id}
+    sonuc = {**kart, "kaynak": kaynak, "course_id": s.get("course_id") or "", "session_id": g.session_id}
+    for k in [k for k in _OZET_ONBELLEK if k[0] == g.session_id]:
+        del _OZET_ONBELLEK[k]
+    _OZET_ONBELLEK[anahtar] = sonuc
+    if len(_OZET_ONBELLEK) > 50:
+        _OZET_ONBELLEK.pop(next(iter(_OZET_ONBELLEK)))
+    return sonuc

@@ -514,18 +514,23 @@ def sure(f):
 
 F = {{f["ad"]: f for f in faaliyetler}}
 te = {{a: sure(f) for a, f in F.items()}}
-ES, EF = {{}}, {{}}
+ES, EF, sira = {{}}, {{}}, []                          # sira: topolojik (ileri geçiş) sırası
 bekle = list(F)
 while bekle:                                         # öncülleri hazır olanları sırayla işle
+    ilerledi = False
     for a in list(bekle):
         if all(o in EF for o in F[a].get("onculler", [])):
             ES[a] = max((EF[o] for o in F[a].get("onculler", [])), default=0)
             EF[a] = ES[a] + te[a]
+            sira.append(a)
             bekle.remove(a)
+            ilerledi = True
+    if not ilerledi:
+        raise SystemExit("Öncül ilişkilerinde döngü var: " + ", ".join(bekle))
 T = max(EF.values())
 ardil = {{a: [b for b in F if a in F[b].get("onculler", [])] for a in F}}
 LS, LF = {{}}, {{}}
-for a in sorted(F, key=lambda x: -EF[x]):           # geri geçiş
+for a in reversed(sira):                            # geri geçiş: topolojik sıranın tersi
     LF[a] = min((LS[b] for b in ardil[a]), default=T)
     LS[a] = LF[a] - te[a]
 for a in sorted(F, key=lambda x: ES[x]):

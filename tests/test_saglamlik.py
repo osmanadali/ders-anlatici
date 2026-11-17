@@ -1,0 +1,65 @@
+"""Sağlamlık: siteler arası istek koruması, güncelleme durumu, sesli okuma ön işlemesi, Chatterbox hata hafızası."""
+import asyncio
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app import main, voice
+
+
+@pytest.fixture
+def client():
+    with TestClient(main.app) as c:
+        yield c
+
+
+def test_baska_siteden_post_reddedilir(client):
+    r = client.post("/api/settings", json={"level": "normal"}, headers={"Origin": "https://kotu.example"})
+    assert r.status_code == 403
+    r = client.post("/api/settings", json={"level": "normal"}, headers={"Sec-Fetch-Site": "cross-site"})
+    assert r.status_code == 403
+    assert client.post("/api/settings", json={"level": "normal"}, headers={"Origin": "http://testserver"}).status_code == 200
+    assert client.post("/api/settings", json={"level": "normal"}).status_code == 200
+
+
+def test_guncelleme_durumu_alanlari(client, monkeypatch):
+    monkeypatch.setattr(main, "_surum_denetle", lambda: {"yeni": True, "mesaj": "x", "simdiki": "a", "son": "bbb"})
+    monkeypatch.setattr(main, "_DENENEN", main.DATA_DIR / ".denenen_test")
+    main._DENENEN.unlink(missing_ok=True)
+    d = client.get("/api/guncelle/durum").json()
+    assert d["yeni"] and not d["denendi"] and "pencere_acik" in d and "mesgul" in d
+    main._guncel_onbellek.update(sonuc={"son": "bbb"})
+    monkeypatch.setenv("DERS_BASLATICI", "1")
+    assert client.post("/api/guncelle/yeniden-baslat").json()["ok"]
+    main.YENIDEN_BASLAT[0] = False
+    assert client.get("/api/guncelle/durum").json()["denendi"]  # aynı sürüm için yeniden denenmez
+    main._DENENEN.unlink(missing_ok=True)
+
+
+def test_okuma_anlami_korur():
+    h = voice.hazirla_metin
+    assert h("x > 5 ise kabul et.") == "x büyüktür 5 ise kabul et."
+    assert "küçüktür" in h("p < 0,05") and "çarpı" in h("2*3 = 6")
+    assert h("Olasılık 50% olur.") == "Olasılık yüzde elli olur."
+    assert h("a -> b") == "a ise b"
+
+
+def test_chatterbox_hatasi_hatirlanir(monkeypatch):
+    cagri = []
+
+    def bozuk(text):
+        cagri.append(text)
+        voice._cb_hata = (__import__("time").time(), "yüklenemedi")
+        raise voice.VoiceError("yüklenemedi")
+
+    async def edge(text, v, *a):
+        return b"edge"
+
+    monkeypatch.setattr(voice, "_cb_hata", None)
+    monkeypatch.setattr(voice, "_chatterbox", bozuk)
+    monkeypatch.setattr(voice, "_edge_tts", edge)
+    asil = voice.load_settings
+    monkeypatch.setattr(voice, "load_settings", lambda: {**asil(), "tts_provider": "chatterbox"})
+    for _ in range(3):
+        assert asyncio.run(voice.speak("merhaba")) == b"edge"
+    assert len(cagri) == 1  # ilk hatadan sonra her adımda modeli yeniden yüklemeye çalışmaz

@@ -263,18 +263,42 @@ def _surum_denetle() -> dict:
         else:
             simdiki = guncelle.load_state().get("sha", "")
         sha, mesaj = guncelle.latest_commit()
-        sonuc = {"yeni": bool(sha and simdiki and sha != simdiki), "mesaj": mesaj, "simdiki": simdiki[:7]}
+        sonuc = {"yeni": bool(sha and simdiki and sha != simdiki), "mesaj": mesaj, "simdiki": simdiki[:7], "son": sha}
     except Exception as e:
         sonuc["hata"] = f"{type(e).__name__}"
+        _guncel_onbellek.update(zaman=_t.time() - 540, sonuc=sonuc)  # hata: 1 dk sonra yeniden dene
+        return sonuc
     _guncel_onbellek.update(zaman=_t.time(), sonuc=sonuc)
     return sonuc
 
 
+_DENENEN = DATA_DIR / ".denenen_surum"
+
+
+def _mesgul() -> bool:
+    """Kesilmemesi gereken bir iş var mı? (anlatım, ses üretimi, kütüphane okuma, paket üretimi)"""
+    if not llm.ogrenci_bosta(20) or any(not t.done() for t in _audio_tasks.values()):
+        return True
+    try:
+        if kutuphane._islem.get("aktif"):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 @app.get("/api/guncelle/durum")
 async def guncelle_durum():
+    import time as _t
+
     d = dict(await asyncio.to_thread(_surum_denetle))
     d["baslatici"] = os.getenv("DERS_BASLATICI") == "1"
-    d["mesgul"] = not llm.ogrenci_bosta(20)  # anlatım sürüyorsa kendiliğinden yeniden başlatma
+    d["mesgul"] = _mesgul()  # bir iş sürüyorsa kendiliğinden yeniden başlatma
+    d["pencere_acik"] = _t.time() - LAST_PING[0] < 50  # açık pencere 20 sn'de bir ping atar
+    try:  # bu sürüm için yeniden başlatma zaten denendi mi? (bozuk/atlanan güncellemede döngüye girme)
+        d["denendi"] = bool(d.get("son")) and _DENENEN.read_text("utf-8").strip() == d["son"]
+    except OSError:
+        d["denendi"] = False
     return d
 
 
@@ -284,6 +308,12 @@ async def guncelle_yeniden_baslat(request: Request):
         raise HTTPException(403, "Yalnızca bilgisayardan yapılabilir.")
     if os.getenv("DERS_BASLATICI") != "1":
         raise HTTPException(409, "Uygulama başlatıcıyla açılmamış; kapatıp 'Ders Anlatıcı' kısayoluyla yeniden aç.")
+    son = (_guncel_onbellek.get("sonuc") or {}).get("son")
+    if son:
+        try:
+            _DENENEN.write_text(son, "utf-8")
+        except OSError:
+            pass
     YENIDEN_BASLAT[0] = True
     return {"ok": True}
 
@@ -949,6 +979,7 @@ async def ask(
     page: int = Form(0),
     section: str = Form(""),  # ders modu: {"i":..,"n":..,"title":..,"summary":..,"pages":[..],"prev":..}
     interrupted: str = Form(""),  # öğrencinin kestiği yerdeki cümle
+    walk: str = Form(""),  # "1" = yürürken dinliyor (ekrana bakmıyor): yalnızca modele giden talimata eklenir
     style: str = Form(""),  # "konusma" = sesli karşılıklı ders (kısa, soru soran üslup)
     files: list[UploadFile] = File(default=[]),
 ):
@@ -1020,6 +1051,9 @@ async def ask(
     if not user_text and not content:
         raise HTTPException(400, "Boş soru")
     content.append({"type": "text", "text": user_text or "Ekteki görseli/dosyayı bana anlat."})
+    if walk == "1":  # yalnızca modele giden içerik: başlık, kayıt ve öğrenme profili ham metinle kalır
+        content.append({"type": "text", "text": "(Öğrenci yürürken dinliyor, ekrana bakmıyor: tahtaya ya da görsele "
+                        "atıf yapma, formülleri sözle oku, kısa ve akıcı anlat.)"})
     user_msg = {"role": "user", "content": content}
 
     kaynak_txt = await _kaynak_bolumleri(course, text.strip() or user_text)
@@ -1070,7 +1104,8 @@ async def ask(
             if hesapla:
                 hs = await _hesap_adimi(soru_metni)
                 if hs:
-                    yield _sse({"type": "hesap", "arac": hs.arac, "baslik": hs.baslik, "message": f"🧮 Hesaplandı: {hs.baslik}"})
+                    yield _sse({"type": "hesap", "arac": hs.arac, "baslik": hs.baslik, "girdi": _son_hesap_girdi[0],
+                                "message": f"🧮 Hesaplandı: {hs.baslik}"})
                     send = messages[:-1] + [{"role": "user", "content": content + [
                         {"type": "text", "text": prompts.hesap_blogu(hesap.sonuc_metni(hs))}]}]
             if deep and send is messages:
@@ -1256,13 +1291,18 @@ def _wants_hesap(settings: dict, mode: str, text: str) -> bool:
     return any(k in t for k in HESAP_ANAHTAR)
 
 
+_son_hesap_girdi: list = [None]
+
+
 async def _hesap_adimi(soru: str):
     """Modele araç seçtirir, hesabı çalıştırır. Hata/eksik girdi/uygun araç yoksa sessizce None."""
     try:
         sec = await asyncio.wait_for(llm.hesap_secimi(soru), HESAP_TIMEOUT)
         if not sec:
             return None
-        return hesap.calistir(sec["arac"], sec["girdiler"])
+        sonuc = await asyncio.to_thread(hesap.calistir, sec["arac"], sec["girdiler"])
+        _son_hesap_girdi[0] = sec["girdiler"] if sonuc is not None else None  # sohbetteki Excel/Python indirme için
+        return sonuc
     except (llm.TutorError, asyncio.TimeoutError, hesap.HesapHatasi) as e:
         log.info("hesap aracı atlandı: %s", e or "süre aşımı")
     except Exception:

@@ -61,7 +61,23 @@ def authorized(request: Request) -> bool:
     return hmac.compare_digest(request.cookies.get(COOKIE, ""), _token(pw))
 
 
+def _baska_siteden(request: Request) -> bool:
+    """Başka bir web sitesinin tarayıcı üzerinden bu uygulamaya istek göndermesi (CSRF) mi?"""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return False
+    if request.headers.get("sec-fetch-site") == "cross-site":
+        return True
+    origin = request.headers.get("origin")
+    if not origin or origin == "null":
+        return False
+    from urllib.parse import urlsplit
+
+    return urlsplit(origin).netloc.lower() != (request.headers.get("host") or "").lower()
+
+
 async def middleware(request: Request, call_next):
+    if _baska_siteden(request):
+        return JSONResponse({"detail": "Başka bir siteden gelen istek reddedildi."}, status_code=403)
     if request.url.path in OPEN_PATHS or authorized(request):
         return await call_next(request)
     if not password():

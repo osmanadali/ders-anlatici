@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 
 import httpx
 
@@ -173,14 +174,27 @@ def hazirla_metin(text: str) -> str:
     yazıya çevirir, çok uzun cümlelere nefes payı koyar. Anlamı değiştirmez."""
     t = text or ""
     t = re.sub(r"```.*?```", " ", t, flags=re.S)
-    t = re.sub(r"[*_`#>~|]+", " ", t)
+    # Markdown işaretleri (yalnızca biçim bağlamında); matematik işaretleri sözcüğe çevrilir (anlam korunur)
+    t = re.sub(r"(?m)^\s*>+\s*", "", t)               # alıntı satırı
+    t = re.sub(r"(?m)^\s*#+\s*", "", t)               # başlık
+    t = re.sub(r"(?m)^\s*[-*+]\s+", "", t)            # madde imi
+    t = re.sub(r"\*\*|__|`+|~~", "", t)
+    t = re.sub(r"(?<!\w)\*(?=\S)|(?<=\S)\*(?!\w)", "", t)  # *vurgu*
+    t = re.sub(r"\s*(->|→|=>|⇒)\s*", " ise ", t)
+    t = re.sub(r"\s*(>=|≥)\s*", " büyük eşittir ", t)
+    t = re.sub(r"\s*(<=|≤)\s*", " küçük eşittir ", t)
+    t = re.sub(r"\s*(!=|≠)\s*", " eşit değildir ", t)
+    t = re.sub(r"\s+>\s+|(?<=\w)>(?=\s*[\w(-])", " büyüktür ", t)
+    t = re.sub(r"\s+<\s+|(?<=\w)<(?=\s*[\w(-])", " küçüktür ", t)
+    t = re.sub(r"(?<=[\w)])\s*[*×·]\s*(?=[\w(])", " çarpı ", t)
+    t = re.sub(r"[|~#]+", " ", t)
     t = re.sub(r"[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F]", "", t)  # emojiler
     for pat, yeni in _KISALTMA:
         t = re.sub(pat, yeni, t)
     # ondalık: yalnızca tek başına duran "3,5" (liste "1,2,3" ya da "12,345" değil)
     t = re.sub(r"(?<![\d,.])(\d{1,2}),(\d{1,2})(?![\d,]|\.\d)", _ondalik, t)
+    t = re.sub(r"(\d+(?:,\d+)?)\s?%", r"yüzde \1", t)   # "50%" → "yüzde 50"
     t = re.sub(r"%\s?(?=\d)", "yüzde ", t)
-    t = re.sub(r"%\s?(?=[^\W\d])", "yüzde ", t)
     t = re.sub(r"yüzde (\d{1,2})(?![\d,.])", lambda m: "yüzde " + sayi_oku(int(m.group(1))), t)
     t = re.sub(r"\s*[—–]\s*", ", ", t)   # uzun tire: doğal duraklama
     t = re.sub(r"\s*\.{3,}\s*", "… ", t)
@@ -231,7 +245,10 @@ async def speak(text: str, previous_text: str = "", next_text: str = "") -> byte
         return await asyncio.to_thread(_xtts, text)
     if provider == "chatterbox":
         try:
-            return await asyncio.to_thread(_chatterbox, text)
+            if _cb_hata and time.time() - _cb_hata[0] < 600:  # yakın zamanda yüklenemedi: her adımda yeniden deneme
+                raise VoiceError(_cb_hata[1])
+            # tek işçili ayrı yürütücü: uzun ses üretimi genel iş parçacığı havuzunu (soru, kütüphane) tıkamaz
+            return await asyncio.get_running_loop().run_in_executor(_cb_yurutucu(), _chatterbox, text)
         except Exception as e:  # paket yok, model inmedi, bellek yetmedi...: sessiz kalma, Edge'e düş
             log.warning("Chatterbox kullanılamadı (%s); Edge sesi kullanılıyor", e)
             return await _edge_tts(text, s.get("edge_voice") or "tr-TR-AhmetNeural",
@@ -412,8 +429,21 @@ def _cb_parcala(text: str, limit: int = 220) -> list[str]:
     return out
 
 
+_cb_hata: tuple[float, str] | None = None
+_cb_exec = None
+
+
+def _cb_yurutucu():
+    global _cb_exec
+    if _cb_exec is None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        _cb_exec = ThreadPoolExecutor(1, thread_name_prefix="chatterbox")
+    return _cb_exec
+
+
 def _chatterbox(text: str) -> bytes:
-    global _cb_model
+    global _cb_model, _cb_hata
     import io
     import wave
 
@@ -422,7 +452,8 @@ def _chatterbox(text: str) -> bytes:
         import torch
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
     except ImportError as e:
-        raise VoiceError("Chatterbox için: pip install -r requirements-ses.txt") from e
+        _cb_hata = (time.time(), "Chatterbox kurulu değil (pip install -r requirements-ses.txt)")
+        raise VoiceError(_cb_hata[1]) from e
     text = hazirla_metin(text)
     if not text:
         raise VoiceError("Okunacak metin boş.")
@@ -432,7 +463,8 @@ def _chatterbox(text: str) -> bytes:
             try:
                 _cb_model = ChatterboxMultilingualTTS.from_pretrained(device=device)
             except Exception as e:
-                raise VoiceError(f"Chatterbox modeli yüklenemedi: {e}") from e
+                _cb_hata = (time.time(), f"Chatterbox modeli yüklenemedi: {e}")
+                raise VoiceError(_cb_hata[1]) from e
         kw = {"language_id": "tr", "exaggeration": 0.5, "cfg_weight": 0.5}
         if VOICE_SAMPLE.exists():  # kullanıcının ses örneği varsa onun sesiyle; yoksa paketin varsayılan sesi
             kw["audio_prompt_path"] = str(VOICE_SAMPLE)

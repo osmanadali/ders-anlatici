@@ -229,6 +229,8 @@ html.cl-printing .cl-print-target button{display:none!important}}
   async function kartlar(el, ctx) {
     const R = kok(el, "cl-kartlar");
     R.innerHTML = '<div class="cl-panel cl-muted">Kartlar yükleniyor…</div>';
+    const yenile = () => { if (!R.isConnected) window.removeEventListener("calis:hata", yenile); else kartlar(el, ctx); };
+    window.addEventListener("calis:hata", yenile);
     let v;
     try { v = await json(ctx, `/api/calis/kartlar?course_id=${encodeURIComponent(cid(ctx))}&n=30`); }
     catch (e) { R.innerHTML = bos("Kartlar", esc(MESAJ(e))); return; }
@@ -305,12 +307,18 @@ html.cl-printing .cl-print-target button{display:none!important}}
       try { k = await json(ctx, `/api/calis/simulasyon/kaynaklar?course_id=${encodeURIComponent(cid(ctx))}`); }
       catch (e) { R.innerHTML = bos("Sınav simülasyonu", esc(MESAJ(e))); return; }
       const sec = k.denemeler.map((d) => `<option value="d${d.index}">${esc(d.baslik)} (${d.soru_sayisi} soru)</option>`).join("") +
-        (k.banka_soru ? `<option value="banka">Soru bankasından karışık (${k.banka_soru} soru var)</option>` : "");
+        (k.banka_soru ? `<option value="banka">Soru bankasından karışık (bankada ${k.banka_soru} soru var)</option>` : "");
       if (!sec) { R.innerHTML = bos("Sınav simülasyonu", "Bu derste henüz deneme sınavı ya da soru bankası yok. Ders paketi hazırlanınca burada görünür."); return; }
+      const nSecenek = (m) => {
+        const l = [10, 20, 30].filter((x) => x <= m);
+        if (!l.length || (m < 30 && !l.includes(m))) l.push(m);
+        const sec = l.includes(20) ? 20 : l[l.length - 1];
+        return l.map((x) => `<option${x === sec ? " selected" : ""}>${x}</option>`).join("");
+      };
       R.innerHTML = `<div class="cl-panel"><h3>⏱ Sınav simülasyonu</h3><p class="cl-muted">Gerçek sınav koşulu: süre işler, ipucu yok. Bitince puanın, konu bazında kaybın ve yanlışların Hatalarım defterine eklenir.</p>` +
         `<div class="cl-grid"><label class="cl-f"><span>Sınav</span><select data-k="kaynak">${sec}</select></label>` +
         `<label class="cl-f"><span>Süre</span><select data-k="sure"><option value="30">30 dk</option><option value="60">60 dk</option><option value="90" selected>90 dk</option><option value="120">120 dk</option><option value="0">Süre yok</option></select></label>` +
-        `<label class="cl-f" data-k="nbox" style="display:none"><span>Soru sayısı</span><select data-k="n"><option>10</option><option selected>20</option><option>30</option></select></label></div>` +
+        `<label class="cl-f" data-k="nbox" style="display:none"><span>Soru sayısı</span><select data-k="n">${nSecenek(k.banka_soru)}</select></label></div>` +
         `<button class="cl-pri" data-k="basla">Sınavı başlat</button></div>`;
       const ks = R.querySelector('[data-k="kaynak"]');
       const nb = () => { R.querySelector('[data-k="nbox"]').style.display = ks.value === "banka" ? "" : "none"; };
@@ -388,6 +396,7 @@ html.cl-printing .cl-print-target button{display:none!important}}
         r.konular.map((k) => `<div class="cl-loss"><span>${esc(k.konu)}</span><div><i style="width:${Math.max(2, Math.round((100 * k.kayip) / mx))}%"></i></div><b>${k.kayip ? "−" + k.kayip : "0"}</b></div>`).join("") + `</div>` +
         `<div class="cl-panel"><p>${r.hata_eklendi ? `📒 ${r.hata_eklendi} soru Hatalarım defterine eklendi.` : "Hiç hata yok, harika!"}</p><div class="cl-row">` +
         (r.hata_eklendi ? `<button data-k="hatalar">Hatalarıma bak</button>` : "") + `<button class="cl-pri" data-k="yeni">Yeni sınav</button></div></div>`;
+      if (r.hata_eklendi) window.dispatchEvent(new CustomEvent("calis:hata"));  // açık Kartlar/Hatalarım yeniden çizilsin
       R.querySelector('[data-k="yeni"]').onclick = baslangic;
       const hb = R.querySelector('[data-k="hatalar"]');
       if (hb) hb.onclick = () => hatalar(el, ctx);
@@ -403,6 +412,7 @@ html.cl-printing .cl-print-target button{display:none!important}}
   }
   // Sohbette hesap aracı kullanıldığında arayüz bunu çağırabilir: indirme düğmeleri (DOM öğesi) döndürür
   function indirmeDugmeleri(arac, girdi, ctx) {
+    if (!girdi || typeof girdi !== "object" || Array.isArray(girdi)) return null;  // sunucu girdi göndermediyse düğme gösterme
     stilVer();
     const d = document.createElement("div");
     d.className = "cl cl-row";
@@ -440,15 +450,22 @@ html.cl-printing .cl-print-target button{display:none!important}}
     else if (t.tip === "json") inp.value = JSON.stringify(v, null, 1);
     else inp.value = v;
   }
+  // Türkçe ondalık virgül: ';' ya da satır sonu varsa onlarla (ve boşlukla) böl, virgül ondalıktır;
+  // yoksa rakamlar arasındaki boşluksuz virgül ondalıktır ("12,5"), ", " ya da boşluk ayırıcıdır.
+  function sayiParcala(v) {
+    const m = String(v);
+    if (/[;\n]/.test(m)) return m.split(/[;\n\s]+/).filter(Boolean);
+    return m.replace(/(\d),(\d)/g, "$1.$2").split(/[\s,]+/).filter(Boolean);
+  }
   function degerOku(inp, t, ad) {
     if (t.tip === "bool") return inp.checked;
     const v = inp.value.trim();
     if (v === "") return undefined;
     const sayi = (x) => { const n = Number(String(x).replace(",", ".")); if (!isFinite(n)) throw new Error(`“${ad}” alanında geçersiz sayı: ${x}`); return n; };
     if (t.tip === "sayi") return sayi(v);
-    if (t.tip === "liste") return v.split(/[\s;,]+/).filter(Boolean).map(sayi);
+    if (t.tip === "liste") return sayiParcala(v).map(sayi);
     if (t.tip === "metinListe") return v.split(/\s*,\s*/).filter(Boolean);
-    if (t.tip === "matris") return v.split(/\n|;/).map((r) => r.trim()).filter(Boolean).map((r) => r.split(/[\s,]+/).filter(Boolean).map(sayi));
+    if (t.tip === "matris") return v.split(/\n/).map((r) => r.trim()).filter(Boolean).map((r) => sayiParcala(r).map(sayi));
     if (t.tip === "json") { try { return JSON.parse(v); } catch { throw new Error(`“${ad}” alanı geçerli JSON olmalı`); } }
     return v;
   }
@@ -470,7 +487,7 @@ html.cl-printing .cl-print-target button{display:none!important}}
         const t = tipBul(s, defs);
         const wrap = document.createElement("label");
         wrap.className = "cl-f";
-        const ipucu = { liste: "sayıları virgülle ayır: 3, 5, 2", matris: "her satır bir satır: 1, 2, 3", metinListe: "virgülle ayır", json: "JSON", sayi: "" }[t.tip] || "";
+        const ipucu = { liste: "3; 5; 2,5", matris: "her satır bir satır: 1; 2; 3,5", metinListe: "virgülle ayır", json: "JSON", sayi: "" }[t.tip] || "";
         wrap.innerHTML = `<span>${esc(s.title && s.title !== ad ? s.title : ad)}</span>`;
         let inp;
         if (t.tip === "enum") { inp = document.createElement("select"); inp.innerHTML = t.enum.map((x) => `<option>${esc(x)}</option>`).join(""); }
@@ -479,6 +496,7 @@ html.cl-printing .cl-print-target button{display:none!important}}
         else { inp = document.createElement("input"); inp.type = t.tip === "sayi" ? "number" : "text"; if (t.tip === "sayi") inp.step = "any"; }
         if (ipucu && inp.placeholder !== undefined) inp.placeholder = ipucu;
         wrap.appendChild(inp);
+        if (t.tip === "liste" || t.tip === "matris") { const d = document.createElement("small"); d.className = "cl-muted"; d.textContent = "Ondalık için virgül, ayırıcı olarak boşluk ya da ; kullan"; wrap.appendChild(d); }
         if (s.description) { const d = document.createElement("small"); d.className = "cl-muted"; d.textContent = s.description; wrap.appendChild(d); }
         form.appendChild(wrap);
         return { ad, t, inp, s };
@@ -527,16 +545,19 @@ html.cl-printing .cl-print-target button{display:none!important}}
     const R = kok(el, "cl-ozetkart");
     R.innerHTML = '<div class="cl-panel cl-muted">Özet kartı hazırlanıyor…</div>';
     let sid = ctx && (ctx.sessionId || ctx.session_id || ctx.sid);
+    const sig = ctx && ctx.signal ? { signal: ctx.signal } : undefined;
+    const iptal = () => !!(sig && sig.signal.aborted);
     try {
       if (!sid) {  // oturum verilmediyse bu dersin en son kaydı
-        const l = await json(ctx, "/api/sessions");
+        const l = await json(ctx, "/api/sessions", undefined, sig);
         const m = l.find((s) => !cid(ctx) || s.course_id === cid(ctx)) || l[0];
         sid = m && m.id;
       }
       if (!sid) throw new Error("Henüz kayıtlı bir anlatım yok.");
-    } catch (e) { R.innerHTML = bos("Özet kartı", esc(MESAJ(e))); return; }
+    } catch (e) { if (iptal()) return; R.innerHTML = bos("Özet kartı", esc(MESAJ(e))); return; }
     let k;
-    try { k = await json(ctx, "/api/calis/ozet-karti", { session_id: sid }); } catch (e) { R.innerHTML = bos("Özet kartı", esc(MESAJ(e))); return; }
+    try { k = await json(ctx, "/api/calis/ozet-karti", { session_id: sid }, sig); } catch (e) { if (iptal()) return; R.innerHTML = bos("Özet kartı", esc(MESAJ(e))); return; }
+    if (iptal()) return;
     R.innerHTML = `<div class="cl-panel cl-ozet cl-print-target"><div class="cl-row"><span class="cl-badge">📝 Ders özeti</span><span class="cl-muted">${k.kaynak === "yapay_zeka" ? "" : "(otomatik, tahtadan)"}</span></div><h3>${esc(k.baslik)}</h3>` +
       (k.anahtar_kavramlar.length ? `<div class="cl-chips">${k.anahtar_kavramlar.map((c) => `<span class="cl-badge">${esc(c)}</span>`).join("")}</div>` : "") +
       (k.formuller.length ? `<h4>Formüller</h4>${k.formuller.map((f) => tex("$$" + f + "$$")).join("")}` : "") +

@@ -210,7 +210,9 @@ def guncelleme_tetikle(port: int) -> bool:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/guncelle/durum", timeout=12) as r:
             d = _json.loads(r.read())
-        if not d.get("yeni") or d.get("mesgul"):
+        # Yalnızca pencere kapalıyken, hiçbir iş sürmüyorken ve bu sürüm daha önce denenmemişse;
+        # pencere açıksa kullanıcı üst çubuktaki "⬆ Güncelleme" hapından kendisi karar verir.
+        if not d.get("yeni") or d.get("mesgul") or d.get("pencere_acik") or d.get("denendi"):
             return False
         req = urllib.request.Request(f"http://127.0.0.1:{port}/api/guncelle/yeniden-baslat", data=b"{}", method="POST",
                                      headers={"Content-Type": "application/json"})
@@ -294,7 +296,7 @@ def main() -> None:
             if already_running(PORT):
                 if guncelleme_tetikle(PORT):  # yeni sürüm varsa açık sunucu güncellenip yeniden başlar
                     time.sleep(3)
-                    for _ in range(120):  # yeni başlatıcının bekleme sayfası açılana kadar (boş hata sayfası görünmesin)
+                    for _ in range(400):  # yeni başlatıcının bekleme sayfası açılana kadar (boş hata sayfası görünmesin)
                         with socket.socket() as so:
                             if so.connect_ex(("127.0.0.1", PORT)) == 0:
                                 break
@@ -314,6 +316,12 @@ def main() -> None:
         return
 
     # Güncelleme ve paket kurulumu sürerken pencere hemen açılır ve ilerlemeyi gösterir
+    if pencere_acik:  # yeniden başlatma: açık pencere bu porta bağlı; eski sürecin portu bırakmasını bekle
+        for _ in range(50):
+            with socket.socket() as so:
+                if so.connect_ex(("127.0.0.1", PORT)) != 0:
+                    break
+            time.sleep(0.1)
     port = free_port(PORT)
     bekle = bekle_baslat(port)
     if bekle and not phone and not pencere_acik:
@@ -412,7 +420,7 @@ def main() -> None:
                 print("Uygulama penceresi kapandı; sunucu kapatılıyor.")
                 server.should_exit = True
 
-    yeniden = [False]
+    yeniden, kapandi = [False], [False]
 
     def yeniden_watch() -> None:
         """Uygulama içi "Güncelle ve yeniden başlat": sunucuyu kapatır, başlatıcı güncelleyip yeniden açar."""
@@ -422,6 +430,18 @@ def main() -> None:
             if mod is not None and getattr(mod, "YENIDEN_BASLAT", [False])[0]:
                 yeniden[0] = True
                 server.should_exit = True
+                # Uzun bir iş parçacığı (PDF okuma, ses üretimi) kapanışı geciktirirse beklemeden yeniden başla
+                for _ in range(150):
+                    time.sleep(0.1)
+                    if kapandi[0]:
+                        return
+                print("Sunucu kapanışı uzadı; beklemeden yeniden başlatılıyor.")
+                lock.release()
+                args = [sys.executable, str(Path(__file__).resolve()),
+                        *[a for a in sys.argv[1:] if a not in ("--guncellendi", "--pencere-acik")],
+                        *([] if phone else ["--pencere-acik"])]
+                subprocess.Popen(args, cwd=ROOT, creationflags=0x08000000 if os.name == "nt" else 0)
+                os._exit(0)
 
     threading.Thread(target=after_start, daemon=True).start()
     threading.Thread(target=yeniden_watch, daemon=True).start()
@@ -433,6 +453,7 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        kapandi[0] = True
         if tunnel:
             tunnel.terminate()
         if phone:  # dosyayı yalnızca onu oluşturan telefon modu siler
