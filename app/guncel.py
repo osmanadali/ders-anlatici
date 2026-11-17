@@ -8,6 +8,7 @@ Ağ çağrıları `_istemci()` üzerinden yapılır (testlerde sahtelenir); kiş
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import html
 import json
@@ -33,6 +34,8 @@ UA = "DersAnlatici/1.0 (educational app)"
 KOK = config.DATA_DIR / "guncel"
 GUN = 86400
 HABER_SAKLA_GUN = 730  # haber kaydı bu kadar gün tutulur (trend için)
+HABER_OZET_GUN = 90  # bundan eski haberlerin özeti saklanmaz
+TREND_EN_AZ_ONCEKI = 50  # 'yükselen' listesi için önceki dönemde en az bu kadar haber
 HABER_KUTUPHANE_GUN = 60  # kütüphaneye yalnızca bu kadar yeni haberler eklenir
 AKIS_BASINA = 12  # bir turda bir akıştan kütüphaneye eklenen en fazla haber
 KONTROL_ARALIGI = 3600
@@ -166,10 +169,15 @@ def _konu_listesi() -> list[dict]:
     return out
 
 
-def _desen(k: dict):
-    kel = sorted({_kat(x).strip() for x in list(k["anahtar"]) + [k["ad"], k["ad_en"]] if len(_kat(x).strip()) >= 3}, key=len,
+@functools.lru_cache(maxsize=512)
+def _desen_derle(anahtar: tuple, ad: str, ad_en: str):
+    kel = sorted({_kat(x).strip() for x in list(anahtar) + [ad, ad_en] if len(_kat(x).strip()) >= 3}, key=len,
                  reverse=True)
     return re.compile(r"(?<![a-z0-9])(?:" + "|".join(re.escape(x) for x in kel) + ")") if kel else None
+
+
+def _desen(k: dict):
+    return _desen_derle(tuple(k["anahtar"]), k["ad"], k["ad_en"])
 
 
 def konu_bul(metin: str, en_fazla: int = 1) -> list[dict]:
@@ -288,7 +296,11 @@ async def haberleri_cek(akislar=None) -> dict:
                     log.warning("haber kütüphaneye eklenemedi: %s", e)
             rapor["kutuphaneye"] += eklenen
     esik = simdi - HABER_SAKLA_GUN * GUN
-    liste = sorted((h for h in kayit.values() if h["tarih"] >= esik), key=lambda h: -h["tarih"])[:3000]
+    ozet_esik = simdi - HABER_OZET_GUN * GUN
+    liste = sorted((h for h in kayit.values() if h["tarih"] >= esik), key=lambda h: -h["tarih"])
+    for h in liste:  # boyutu sınırlamak için eski haberlerin özeti atılır (başlık+tarih+url kalır)
+        if h["tarih"] < ozet_esik and h.get("ozet"):
+            h["ozet"] = ""
     _yaz("haberler", liste)
     _durum_guncelle(haber_zamani=simdi, haber_rapor=rapor)
     if rapor["kutuphaneye"]:
@@ -296,11 +308,29 @@ async def haberleri_cek(akislar=None) -> dict:
     return rapor
 
 
-def trend_hesapla(liste: list[dict] | None = None, simdi: float | None = None, ay: int = 6) -> dict:
+_trend_onbellek: dict = {}
+
+
+def trend_hesapla(liste: list[dict] | None = None, simdi: float | None = None, ay: int = 6,
+                  en_az_onceki: int = TREND_EN_AZ_ONCEKI) -> dict:
+    """Haber kaydı verilmediyse (liste=None) sonuç, kaydın sürümüne (uzunluk + son zaman) göre önbelleğe alınır."""
+    if liste is not None:
+        return _trend_hesapla(liste, simdi, ay, en_az_onceki)
+    kayit = haberler()
+    anahtar = (len(kayit), max((h.get("tarih", 0) for h in kayit), default=0), ay, en_az_onceki,
+               int((simdi or _simdi()) // GUN))
+    sonuc = _trend_onbellek.get(anahtar)
+    if sonuc is None:
+        sonuc = _trend_hesapla(kayit, simdi, ay, en_az_onceki)
+        _trend_onbellek.clear()
+        _trend_onbellek[anahtar] = sonuc
+    return sonuc
+
+
+def _trend_hesapla(liste: list[dict], simdi: float | None, ay: int, en_az_onceki: int) -> dict:
     """Son `ay` ay ile ondan önceki aynı uzunluktaki dönemde bilgi haritası anahtar kelimelerinin geçiş sayısı.
     Bir haber bir konu için en çok bir kez sayılır. 'yukselenler': artış > 0 ve son dönemde en az 2 haber."""
     simdi = simdi or _simdi()
-    liste = haberler() if liste is None else liste
     s = ay * 30 * GUN
     son = [h for h in liste if simdi - s <= h["tarih"] <= simdi]
     onceki = [h for h in liste if simdi - 2 * s <= h["tarih"] < simdi - s]
@@ -317,19 +347,23 @@ def trend_hesapla(liste: list[dict] | None = None, simdi: float | None = None, a
                           "oran": round((y - e) / (e + 2), 2)})
     yuk = sorted((x for x in sonuc if x["degisim"] > 0 and x["yeni"] >= 2), key=lambda x: (-x["oran"], -x["degisim"]))
     dus = sorted((x for x in sonuc if x["degisim"] < 0), key=lambda x: (x["oran"], x["degisim"]))
-    return {"ay": ay, "son_haber": len(son), "onceki_haber": len(onceki), "yukselenler": yuk[:8], "dusenler": dus[:5]}
+    neden = ""
+    if len(onceki) < en_az_onceki:  # karşılaştırma dönemi boşsa "yükselen" yanıltıcı olur
+        yuk, neden = [], f"Karşılaştırma için önceki dönemde en az {en_az_onceki} haber gerekir (şu an {len(onceki)})"
+    return {"ay": ay, "son_haber": len(son), "onceki_haber": len(onceki), "yukselenler": yuk[:8], "dusenler": dus[:5],
+            "yeterli_veri": not neden, "yukselen_neden": neden}
 
 
 @router.get("/haberler")
 async def haber_listesi(n: int = 30):
     n = max(1, min(n, 100))
     return {"haberler": haberler()[:n], "durum": {k: v for k, v in _durum().items() if k.startswith("haber")},
-            "trend": trend_hesapla()}
+            "trend": await asyncio.to_thread(trend_hesapla)}
 
 
 @router.get("/trend")
 async def trend():
-    return trend_hesapla()
+    return await asyncio.to_thread(trend_hesapla)
 
 
 @router.post("/haberler/cek")
@@ -482,7 +516,7 @@ def gunun_kavrami_sec(bugun: date | None = None) -> dict:
     if not kalan:  # tur bitti: yeni tura başla (yalnızca en son kavramı hariç tut)
         son = gecmis[-1]["id"] if gecmis else ""
         gecmis, kalan = [], [h for h in havuz if h["id"] != son] or havuz
-    yuk = {"k:" + x["id"] for x in trend_hesapla()["yukselenler"][:3]}
+    yuk = {"k:" + x["id"] for x in trend_hesapla()["yukselenler"][:3]}  # çağıran gunun_kavrami to_thread ile çalıştırır
     oncelikli = [h for h in kalan if h["id"] in yuk]
     adaylar = oncelikli if oncelikli and _tohum(iso, "yuk") % 3 == 0 else kalan
     sec = adaylar[_tohum(iso, len(havuz)) % len(adaylar)]
@@ -491,10 +525,10 @@ def gunun_kavrami_sec(bugun: date | None = None) -> dict:
     return sec
 
 
-def _yedek_kavram(k: dict) -> dict:
+async def _yedek_kavram(k: dict) -> dict:
     parca = None
     try:
-        sonuc = kutuphane.ara(k["ad_en"] or k["ad"], None, 3)
+        sonuc = await asyncio.to_thread(kutuphane.ara, k["ad_en"] or k["ad"], None, 3)
         if sonuc:
             parca = _duz(sonuc[0]["metin"], 380)
     except Exception:
@@ -508,7 +542,7 @@ def _yedek_kavram(k: dict) -> dict:
 async def _kavram_yz_uret(k: dict, iso: str) -> None:
     ctx = ""
     try:
-        sonuc = kutuphane.ara(k["ad_en"] or k["ad"], None, 3)
+        sonuc = await asyncio.to_thread(kutuphane.ara, k["ad_en"] or k["ad"], None, 3)
         ctx = "\n\n".join(_duz(s["metin"], 500) for s in sonuc[:2])
     except Exception:
         pass
@@ -530,9 +564,9 @@ async def gunun_kavrami(bekle_yz: bool = False) -> dict:
     iso = _bugun().isoformat()
     ic = _oku("kavram", {})
     if not (isinstance(ic, dict) and ic.get("tarih") == iso):
-        k = gunun_kavrami_sec()
+        k = await asyncio.to_thread(gunun_kavrami_sec)
         ic = {"tarih": iso, "kavram": k["ad"], "kavram_en": k["ad_en"], "ders": k["ders"], "id": k["id"],
-              **_yedek_kavram(k), "yapay_zeka": False}
+              **(await _yedek_kavram(k)), "yapay_zeka": False}
         _yaz("kavram", ic)
         try:
             if llm.ai_hazir():
@@ -553,6 +587,21 @@ async def gunun_kavrami_ucu():
 
 
 # ---------------------------------------------------------------- 4) Vikipedi'den öğrenme
+class _VikiHiz(RuntimeError):
+    """Vikipedi 429/5xx: bir süre yeniden denenmez."""
+
+
+VIKI_GERI_CEKIL = 3600
+
+
+def _viki_eslesir(terim: str, baslik: str) -> bool:
+    t, b = _viki_anahtar(terim), _viki_anahtar(baslik)
+    if not t or not b:
+        return False
+    ilk = t.split(" ")[0]
+    return t in b or b in t or (len(ilk) >= 3 and ilk in b)
+
+
 def _viki_anahtar(terim: str) -> str:
     return re.sub(r"\s+", " ", _kat(terim)).strip()
 
@@ -571,15 +620,17 @@ async def _viki_baslik(c: httpx.AsyncClient, dil: str, terim: str) -> dict | Non
             j = r.json()
             if j.get("type") != "disambiguation" and j.get("title"):
                 return j
-        elif r.status_code == 429:
-            raise RuntimeError("Vikipedi hız sınırı (429)")
+        elif r.status_code == 429 or r.status_code >= 500:
+            raise _VikiHiz(f"Vikipedi geçici hata ({r.status_code})")
     r = await c.get(f"{taban}/w/api.php", params={"action": "query", "list": "search", "srsearch": terim,
                                                       "srlimit": "1", "format": "json"})
-    if r.status_code == 429:
-        raise RuntimeError("Vikipedi hız sınırı (429)")
+    if r.status_code == 429 or r.status_code >= 500:
+        raise _VikiHiz(f"Vikipedi geçici hata ({r.status_code})")
     ara = ((r.json().get("query") or {}).get("search") or []) if r.status_code == 200 else []
     if not ara:
         return None
+    if not _viki_eslesir(terim, ara[0]["title"]):
+        return {"_eslesmedi": True}
     r = await c.get(f"{taban}/api/rest_v1/page/summary/{quote(ara[0]['title'].replace(' ', '_'), safe='')}")
     return r.json() if r.status_code == 200 and r.json().get("type") != "disambiguation" else None
 
@@ -597,13 +648,19 @@ async def vikipedi_ogren(terim: str, dil: str | None = None) -> dict:
     if onceki and (onceki["durum"] in ("eklendi", "zaten") or _simdi() - onceki["zaman"] < 7 * GUN):
         return {"durum": "zaten" if onceki["durum"] != "bulunamadi" else "bulunamadi", "baslik": onceki.get("baslik", ""),
                 "dil": onceki.get("dil", "")}
+    if float(d.get("viki_geri_cekil") or 0) > _simdi():
+        return {"durum": "hata", "neden": "Vikipedi geçici olarak sınırlı; daha sonra denenecek"}
     diller = [dil] if dil in ("tr", "en") else ["tr", "en"]
     hata = ""
+    eslesmedi = False
     try:
         async with _istemci() as c:
             for dl in diller:
                 j = await _viki_baslik(c, dl, terim)
                 if not j:
+                    continue
+                if j.get("_eslesmedi"):
+                    eslesmedi = True
                     continue
                 baslik = j["title"]
                 taban = f"https://{dl}.wikipedia.org"
@@ -634,6 +691,8 @@ async def vikipedi_ogren(terim: str, dil: str | None = None) -> dict:
     except Exception as e:
         hata = f"{type(e).__name__}: {e}"[:160]
         log.warning("Vikipedi: %s", hata)
+        if isinstance(e, _VikiHiz):
+            _durum_guncelle(viki_geri_cekil=_simdi() + VIKI_GERI_CEKIL)
     if hata:
         return {"durum": "hata", "neden": hata}
     with _kilit:
@@ -642,6 +701,8 @@ async def vikipedi_ogren(terim: str, dil: str | None = None) -> dict:
         v[anahtar] = {"durum": "bulunamadi", "zaman": _simdi()}
         d["vikipedi"] = v
         _yaz("durum", d)
+    if eslesmedi:
+        return {"durum": "atlandi", "eklendi": False, "neden": "eşleşme yok"}
     return {"durum": "bulunamadi"}
 
 
@@ -668,7 +729,8 @@ async def zayif_dugumleri_ogren(en_fazla: int = VIKI_GUNLUK) -> list[dict]:
     """Kütüphane kapsamı zayıf bilgi haritası düğümleri için Vikipedi makalesi ekler (günde birkaç)."""
     sonuc = []
     say = await asyncio.to_thread(bilgi_haritasi.kapsam_olc)
-    zayiflar = sorted((n, k) for k in _konu_listesi() for n in [say.get(k["id"], 0)] if n < bilgi_haritasi.ZAYIF_ESIK)
+    zayiflar = sorted(((n, k) for k in _konu_listesi() for n in [say.get(k["id"], 0)] if n < bilgi_haritasi.ZAYIF_ESIK),
+                      key=lambda x: (x[0], x[1]["id"]))
     for _, k in zayiflar:
         if len(sonuc) >= en_fazla:
             break
@@ -676,6 +738,8 @@ async def zayif_dugumleri_ogren(en_fazla: int = VIKI_GUNLUK) -> list[dict]:
             if len(sonuc) >= en_fazla:
                 break
             r = await vikipedi_ogren(terim, dil)
+            if r["durum"] == "hata":  # hız sınırı/ağ hatası: bu turu bırak
+                return sonuc
             if r["durum"] == "eklendi":
                 sonuc.append({"konu": k["ad"], **r})
             await _bekle(1.0)
@@ -787,10 +851,14 @@ async def bitirme_adim_uret(adim: str, bekle: bool = False) -> dict:
     if adim == "yontem":
         s["araclar"] = _arac_onerileri(b["konu"] + " " + " ".join(m["baslik"] + " " + m["aciklama"] for m in s["maddeler"]))
     s["uretildi"] = _simdi()
-    b["adimlar"][adim] = s
-    b["guncellendi"] = _simdi()
-    _yaz("bitirme", b)
-    return b
+    with _kilit:  # uzun await sırasında başka istek yazmış olabilir: taze oku, yalnızca bu adımı birleştir
+        taze = bitirme_durumu()
+        if taze["konu"] != b["konu"]:
+            return taze  # konu değişti ya da sıfırlandı: eski sonucu yazma
+        taze["adimlar"][adim] = s
+        taze["guncellendi"] = _simdi()
+        _yaz("bitirme", taze)
+        return taze
 
 
 class BitirmeGirdi(BaseModel):
@@ -809,19 +877,21 @@ async def bitirme_getir():
 @router.post("/bitirme")
 async def bitirme_kaydet(g: BitirmeGirdi):
     if g.sifirla:
-        _yaz("bitirme", {})
-        return bitirme_durumu()
-    b = bitirme_durumu()
-    if g.konu is not None:
-        if g.konu.strip() != b["konu"]:
-            b["adimlar"], b["literatur"] = {}, []
-        b["konu"] = g.konu.strip()
-    if g.aciklama is not None:
-        b["aciklama"] = g.aciklama.strip()
-    if g.hafta:
-        b["hafta"] = max(8, min(20, g.hafta))
-    b["guncellendi"] = _simdi()
-    _yaz("bitirme", b)
+        with _kilit:
+            _yaz("bitirme", {})
+            return bitirme_durumu()
+    with _kilit:
+        b = bitirme_durumu()
+        if g.konu is not None:
+            if g.konu.strip() != b["konu"]:
+                b["adimlar"], b["literatur"] = {}, []
+            b["konu"] = g.konu.strip()
+        if g.aciklama is not None:
+            b["aciklama"] = g.aciklama.strip()
+        if g.hafta:
+            b["hafta"] = max(8, min(20, g.hafta))
+        b["guncellendi"] = _simdi()
+        _yaz("bitirme", b)
     if g.adim:
         try:
             return await bitirme_adim_uret(g.adim)
@@ -837,6 +907,7 @@ class LiteraturGirdi(BaseModel):
 @router.post("/bitirme/literatur")
 async def bitirme_literatur(g: LiteraturGirdi):
     b = bitirme_durumu()
+    konu0 = b["konu"]
     sorgu = g.sorgu.strip() or " ".join(((b["adimlar"].get("daraltma") or {}).get("sorgular") or [b["konu"]])[:1]).strip()
     if not sorgu:
         raise HTTPException(400, "Önce proje konusunu yaz")
@@ -856,11 +927,19 @@ async def bitirme_literatur(g: LiteraturGirdi):
             eklendi = False
         sonuc.append({"baslik": m["baslik"], "yazar": ", ".join(m.get("yazarlar") or [])[:80], "yil": m.get("yil"),
                       "dergi": m.get("dergi"), "doi": m.get("doi"), "url": m.get("url"), "yeni": eklendi})
-    b["literatur"] = sonuc
-    b["literatur_sorgu"] = sorgu
-    b["guncellendi"] = _simdi()
-    _yaz("bitirme", b)
-    return {"sorgu": sorgu, "sonuclar": sonuc, "hata": hata}
+    if not sonuc and not hata:
+        hata = "Bu sorgu için sonuç bulunamadı"
+    with _kilit:  # uzun await sonrası taze oku; yalnızca literatür alanlarını birleştir
+        taze = bitirme_durumu()
+        if taze["konu"] != konu0:
+            return {"sorgu": sorgu, "sonuclar": taze["literatur"], "hata": "Proje konusu değişti; sonuçlar kaydedilmedi"}
+        if hata:  # hata ya da boş sonuç: mevcut listeyi ezme
+            return {"sorgu": sorgu, "sonuclar": taze["literatur"], "hata": hata}
+        taze["literatur"] = sonuc
+        taze["literatur_sorgu"] = sorgu
+        taze["guncellendi"] = _simdi()
+        _yaz("bitirme", taze)
+    return {"sorgu": sorgu, "sonuclar": sonuc, "hata": ""}
 
 
 # ---------------------------------------------------------------- 6) günlük hayattan endüstri mühendisliği
@@ -903,17 +982,41 @@ def _gun_gecti(anahtar: str, saat: float = 20) -> bool:
 
 
 async def tur_calistir() -> dict:
-    """Zamanlayıcının bir turu: haber (günde bir), bülten (haftada bir), günün kavramı, Vikipedi (günde bir)."""
+    """Zamanlayıcının bir turu: haber (günde bir), bülten (haftada bir), günün kavramı, Vikipedi (günde bir).
+    Her adım ayrı korunur: biri hata verirse diğerleri çalışmaya devam eder."""
     rapor: dict = {}
+
+    async def adim(ad, is_):
+        try:
+            rapor[ad] = await is_()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.warning("güncel adım %s başarısız: %s", ad, e)
+            rapor[ad] = {"hata": f"{type(e).__name__}: {e}"[:160]}
+
     if _gun_gecti("haber_zamani"):
-        rapor["haber"] = await haberleri_cek()
-    b = _oku("bulten", {})
-    if _simdi() - float((b or {}).get("uretildi") or 0) > 7 * GUN and (haberler() or kutuphane.son_eklenenler(7, ("makale",), 1)):
-        rapor["bulten"] = bool(await bulten_uret(bekle=True))
+        await adim("haber", haberleri_cek)
+    try:
+        b = _oku("bulten", {})
+        bulten_gerek = _simdi() - float((b or {}).get("uretildi") or 0) > 7 * GUN and (
+            haberler() or kutuphane.son_eklenenler(7, ("makale",), 1))
+    except Exception as e:
+        log.warning("güncel bülten kontrolü: %s", e)
+        bulten_gerek = False
+    if bulten_gerek:
+        async def bulten():
+            return bool(await bulten_uret(bekle=True))
+        await adim("bulten", bulten)
     if _gun_gecti("viki_zamani"):
         _durum_guncelle(viki_zamani=_simdi())
-        rapor["vikipedi"] = await zayif_dugumleri_ogren()
-    await gunun_kavrami(bekle_yz=False)
+        await adim("vikipedi", zayif_dugumleri_ogren)
+
+    async def kavram():
+        await gunun_kavrami(bekle_yz=False)
+    await adim("kavram", kavram)
+    if rapor.get("kavram") is None:
+        rapor.pop("kavram", None)
     return rapor
 
 

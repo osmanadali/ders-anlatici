@@ -95,12 +95,31 @@ def test_trend_yukselenleri_bulur():
                       "tarih": SIMDI - (10 + i) * GUN, "kaynak": "x"})
     liste.append({"baslik": "Kanban uygulaması", "ozet": "", "url": "e1", "tarih": SIMDI - 250 * GUN, "kaynak": "x"})
     liste.append({"baslik": "Kanban ve JIT", "ozet": "", "url": "e2", "tarih": SIMDI - 260 * GUN, "kaynak": "x"})
-    t = guncel.trend_hesapla(liste, SIMDI)
+    t0 = guncel.trend_hesapla(liste, SIMDI)  # önceki dönemde 50'den az haber: yükselen listesi boş + neden
+    assert t0["yukselenler"] == [] and t0["yeterli_veri"] is False and t0["yukselen_neden"]
+    t = guncel.trend_hesapla(liste, SIMDI, en_az_onceki=0)
     ids = [x["id"] for x in t["yukselenler"]]
     assert "dijital_ikiz" in ids
     assert t["son_haber"] == 5 and t["onceki_haber"] == 2
     kanban = next(x for x in t["dusenler"] if x["id"] == "kanban_jit")
     assert kanban["yeni"] == 0 and kanban["eski"] == 2
+
+
+def test_trend_onbellek_ve_haber_kirpma(monkeypatch):
+    guncel._yaz("haberler", [{"baslik": "Dijital ikiz", "ozet": "x", "url": "u1", "tarih": SIMDI - GUN, "kaynak": "x"}])
+    t1 = guncel.trend_hesapla()
+    assert guncel.trend_hesapla() is t1  # aynı sürüm: önbellekten
+    guncel._yaz("haberler", guncel.haberler() + [{"baslik": "Kanban", "ozet": "", "url": "u2", "tarih": SIMDI - 2 * GUN, "kaynak": "x"}])
+    assert guncel.trend_hesapla() is not t1
+    # 3000'den fazla yakın tarihli haber kırpılmaz; 90 günden eski haberin özeti atılır, 730 günden eskisi silinir
+    eski = {"baslik": "Eski", "ozet": "uzun özet", "url": "eski", "tarih": SIMDI - 200 * GUN, "kaynak": "x"}
+    cok_eski = {"baslik": "Çok eski", "ozet": "y", "url": "ce", "tarih": SIMDI - 800 * GUN, "kaynak": "x"}
+    cok = [{"baslik": f"H{i}", "ozet": "o", "url": f"c{i}", "tarih": SIMDI - 5 * GUN - i, "kaynak": "x"} for i in range(3100)]
+    guncel._yaz("haberler", cok + [eski, cok_eski])
+    _istemci_yap(monkeypatch, lambda req: httpx.Response(200, text=_rss([])))
+    asyncio.run(guncel.haberleri_cek([("Dive", "https://x.com/rss")]))
+    k = {h["url"]: h for h in guncel.haberler()}
+    assert len(k) == 3101 and "ce" not in k and k["eski"]["ozet"] == "" and k["eski"]["baslik"] == "Eski"
 
 
 # ---------------------------------------------------------------- bülten
@@ -214,7 +233,105 @@ def test_vikipedi_bulunamadi_ve_hata(monkeypatch):
     assert asyncio.run(guncel.vikipedi_ogren("Little's law", "en"))["durum"] == "hata"
 
 
+def test_vikipedi_eslesmeyen_baslik_eklenmez(monkeypatch):
+    def h(req):
+        yol = req.url.path
+        if "/api/rest_v1/page/summary/" in yol:
+            return httpx.Response(404, json={})
+        if yol == "/w/api.php":
+            return httpx.Response(200, json={"query": {"search": [{"title": "Alakasız Makale"}]}})
+        return httpx.Response(404)
+    _istemci_yap(monkeypatch, h)
+    r = asyncio.run(guncel.vikipedi_ogren("kuyruk teorisi", "tr"))
+    assert r["eklendi"] is False and r["neden"] == "eşleşme yok"
+    assert not [x for x in kutuphane.liste() if x["tur"] == "diger"]
+
+
+def test_vikipedi_429_geri_cekilir(monkeypatch):
+    n = []
+    _istemci_yap(monkeypatch, lambda req: (n.append(1), httpx.Response(429))[1])
+    assert asyncio.run(guncel.vikipedi_ogren("Little's law", "en"))["durum"] == "hata"
+    s = len(n)
+    assert asyncio.run(guncel.vikipedi_ogren("Pareto analysis", "en"))["durum"] == "hata" and len(n) == s  # ağa gitmez
+
+
+def test_zayif_dugumler_ayni_puanda_siralanir(monkeypatch):
+    monkeypatch.setattr(guncel.bilgi_haritasi, "kapsam_olc", lambda: {})  # hepsi 0 puan
+    cagri = []
+
+    async def sahte(terim, dil=None):
+        cagri.append(terim)
+        return {"durum": "eklendi", "baslik": terim}
+    monkeypatch.setattr(guncel, "vikipedi_ogren", sahte)
+    r = asyncio.run(guncel.zayif_dugumleri_ogren(2))
+    assert len(r) == 2 and len(cagri) == 2
+
+
+def test_tur_calistir_adimlar_birbirini_durdurmaz(monkeypatch):
+    async def patla(*a, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(guncel, "haberleri_cek", patla)
+    monkeypatch.setattr(guncel, "zayif_dugumleri_ogren", patla)
+    r = asyncio.run(guncel.tur_calistir())
+    assert "hata" in r["haber"] and "hata" in r["vikipedi"]
+    assert _oku_kavram()["kavram"]  # günün kavramı yine üretildi
+
+
+def _oku_kavram():
+    return guncel._oku("kavram", {})
+
+
+def test_yedek_kavram_olay_dongusunu_bloklamaz(monkeypatch):
+    import threading
+    kimlikler = []
+    ana = threading.get_ident()
+    monkeypatch.setattr(guncel.kutuphane, "ara", lambda *a, **k: kimlikler.append(threading.get_ident()) or [])
+    asyncio.run(guncel.gunun_kavrami())
+    assert kimlikler and all(i != ana for i in kimlikler)
+
+
 # ---------------------------------------------------------------- bitirme
+def test_bitirme_eszamanli_adimlar_ve_sifirlama(monkeypatch):
+    guncel._yaz("bitirme", {"konu": "Depo", "aciklama": "", "adimlar": {}, "literatur": []})
+    orijinal = guncel._yz
+
+    async def yavas(*a, **k):
+        await asyncio.sleep(0.05)
+        return None
+    monkeypatch.setattr(guncel, "_yz", yavas)
+
+    async def paralel():
+        return await asyncio.gather(guncel.bitirme_adim_uret("daraltma"), guncel.bitirme_adim_uret("zaman"))
+    asyncio.run(paralel())
+    assert guncel.bitirme_durumu()["adimlar"].keys() == {"daraltma", "zaman"}  # biri ötekini silmedi
+
+    async def sifirlanirken():
+        t = asyncio.create_task(guncel.bitirme_adim_uret("rapor"))
+        await asyncio.sleep(0.01)
+        guncel._yaz("bitirme", {})
+        return await t
+    taze = asyncio.run(sifirlanirken())
+    assert taze["konu"] == "" and guncel.bitirme_durumu()["adimlar"] == {}  # sıfırlama geri alınmadı
+
+
+def test_literatur_hata_ve_bos_sonucta_listeyi_korur(monkeypatch):
+    mevcut = [{"baslik": "Eski makale", "doi": "10.1/e"}]
+    guncel._yaz("bitirme", {"konu": "Depo", "aciklama": "", "adimlar": {}, "literatur": mevcut})
+    _istemci_yap(monkeypatch, lambda req: httpx.Response(500))
+
+    async def patla(*a, **k):
+        raise RuntimeError("ağ yok")
+    monkeypatch.setattr(guncel.literatur, "_crossref", patla)
+    r = asyncio.run(guncel.bitirme_literatur(guncel.LiteraturGirdi(sorgu="depo")))
+    assert r["hata"] and guncel.bitirme_durumu()["literatur"] == mevcut
+
+    async def bos(*a, **k):
+        return []
+    monkeypatch.setattr(guncel.literatur, "_crossref", bos)
+    r = asyncio.run(guncel.bitirme_literatur(guncel.LiteraturGirdi(sorgu="depo")))
+    assert r["hata"] and guncel.bitirme_durumu()["literatur"] == mevcut
+
+
 def test_bitirme_durum_kaydi_ve_adimlar():
     guncel_b = guncel.bitirme_durumu()
     assert guncel_b["konu"] == "" and guncel_b["adimlar"] == {}

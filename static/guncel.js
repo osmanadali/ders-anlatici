@@ -135,6 +135,9 @@
           h("div", { class: "gn-trend" }, trend.yukselenler.slice(0, 6).map(function (t) {
             return h("span", { class: "gn-badge", title: t.eski + " → " + t.yeni + " haber" }, t.ad + " ↑" + t.degisim);
           }))));
+      } else if (trend && trend.yeterli_veri === false) {
+        kart.appendChild(h("div", { class: "gn-item" }, h("h4", null, "Yükselen konular"),
+          h("p", { class: "gn-muted" }, "Henüz yeterli veri yok: önceki dönemle karşılaştırmak için daha fazla haber birikmeli.")));
       }
     }
 
@@ -186,17 +189,23 @@
       kart.appendChild(cevap);
       kart.appendChild(h("div", { class: "gn-row", style: "margin-top:10px" }, goster, konus,
         k.bekliyor ? h("span", { class: "gn-muted" }, h("span", { class: "gn-spin" }), "Hoca açıklamayı zenginleştiriyor…") : null));
-      if (k.bekliyor && deneme < 12) {
-        clearTimeout(sayac);
-        sayac = setTimeout(function () {
-          if (!kart.isConnected) return;
+      if (k.bekliyor) yokla();
+    }
+
+    // Yoklama çizimden ayrı: yalnızca içerik değişince (yapay_zeka true / bekliyor false) yeniden çizilir.
+    // Aralık giderek uzar (6 → 10 → 20 sn), toplam en fazla 5 dk.
+    var ARALIK = [6000, 10000, 20000], baslangic = Date.now();
+    function yokla() {
+      clearTimeout(sayac);
+      if (Date.now() - baslangic > 300000) return;
+      sayac = setTimeout(function () {
+        if (!kart.isConnected) return;
+        J("/api/guncel/gunun-kavrami").then(function (y) {
+          if (y.yapay_zeka || !y.bekliyor) { ciz(y); return; }
           deneme++;
-          J("/api/guncel/gunun-kavrami").then(function (y) {
-            // cevap açıkken yeniden çizip öğrenciyi bozma: yalnızca içerik değiştiyse çiz
-            if (y.yapay_zeka || !y.bekliyor) ciz(y); else { deneme++; ciz(y); }
-          }).catch(function () { /* sessiz */ });
-        }, 6000);
-      }
+          yokla();
+        }).catch(function () { deneme++; yokla(); });
+      }, ARALIK[Math.min(deneme, ARALIK.length - 1)]);
     }
 
     kart.appendChild(yukleniyor());
@@ -377,18 +386,33 @@
   }
 
   /* ------------------------------------------------------------ Vikipedi bekçisi */
-  var DURAK = /\b(bana|lütfen|lutfen|biraz|kısaca|kisaca|detaylı|detayli|anlat|anlatır mısın|anlatir misin|açıkla|acikla|hocam|merhaba|şunu|bunu|hakkında|hakkinda|nedir|nedir\?|ne demek|ne anlama gelir|nasıl çalışır|nasil calisir|nasıl|nasil|neden|ne|mi|mı|mu|mü|bir|bu|şu|su|ve|ile|için|icin)\b/gi;
+  var DURAK = new Set(["bana", "lütfen", "lutfen", "biraz", "kısaca", "kisaca", "detaylı", "detayli", "hocam", "merhaba",
+    "şunu", "bunu", "bir", "bu", "şu", "su", "ve", "ile", "için", "icin", "hakkında", "hakkinda", "bilgi", "verir", "misin",
+    "mısın", "musun", "müsün", "ne", "nedir", "neden", "nasıl", "nasil"]);
   var denenen = {};
 
+  // Yalnızca açık kalıplar: "X nedir", "X ne demek", "X ne işe yarar", "X nasıl çalışır", "X hakkında bilgi", "X'i/X'ı anlat".
+  var KALIPLAR = [
+    /^(.+?)\s+(?:nedir|ne demek|ne anlama gelir|ne işe yarar|ne ise yarar|nasıl çalışır|nasil calisir)(?:\s+(?:acaba|kısaca|kisaca))?$/iu,
+    /^(.+?)\s+hakkında\s+(?:biraz\s+|detaylı\s+)?bilgi(?:\s+(?:ver|verir misin|verebilir misin|ver lütfen))?$/iu,
+    /^(.+?)\s*['’]\s*(?:i|ı|u|ü|yi|yı|yu|yü)\s+(?:bana\s+)?(?:kısaca\s+)?anlat(?:ır mısın|ir misin|)$/iu
+  ];
+
   function terimCikar(metin) {
-    var t = String(metin || "").replace(/\s+/g, " ").trim();
+    var t = String(metin || "").replace(/[?!.]+$/u, "").replace(/\s+/g, " ").trim();
     if (!t || t.length > 160) return "";
-    var m = t.match(/^(.{3,70}?)\s+(nedir|ne demek|ne anlama gelir|nasıl çalışır|nasil calisir|hakkında)\b/i);
-    var aday = m ? m[1] : (t.split(" ").length <= 5 ? t : "");
-    aday = aday.replace(/[?!.,;:"“”()]/g, " ").replace(DURAK, " ").replace(/\s+/g, " ").trim();
-    var kelime = aday.split(" ").filter(Boolean).slice(0, 4);
+    var aday = "";
+    for (var i = 0; i < KALIPLAR.length && !aday; i++) {
+      var m = t.match(KALIPLAR[i]);
+      if (m) aday = m[1];
+    }
+    if (!aday) return "";
+    aday = aday.replace(/[?!,;:"“”()]/g, " ").replace(/\s+/g, " ").trim();
+    // durak sözcükleri tam kelime olarak ele (JS \b Türkçe harfleri kelime saymaz)
+    var kelime = aday.split(" ").filter(function (w) { return w && !DURAK.has(w.toLocaleLowerCase("tr")); });
+    if (!kelime.length || kelime.length > 5) return "";
     aday = kelime.join(" ");
-    if (aday.length < 4 || aday.length > 60 || /\d{2,}|[=+*\/^]/.test(aday)) return "";
+    if (aday.length < 2 || aday.length > 60 || /\d{2,}|[=+*\/^]/.test(aday)) return "";
     return aday;
   }
 
