@@ -142,7 +142,7 @@ def test_indirme_kapaliysa_anlasilir_hata(monkeypatch, tmp_path):
 def test_edge_ulasilamazsa_internetsiz_ses(monkeypatch):
     from app import voice
 
-    async def edge_yok(text, v):
+    async def edge_yok(text, v, *a):
         raise voice.VoiceError("ağ yok")
 
     monkeypatch.setattr(voice, "_edge_tts", edge_yok)

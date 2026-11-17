@@ -24,6 +24,8 @@ const PARTS = {
   upperarm: (n) => /(upperarm|arm)(l|r|left|right)?$/.test(n.replace(/^(left|right)/, "")) && !/fore|lower|hand|finger/.test(n),
   forearm: (n) => /(forearm|lowerarm|elbow)/.test(n),
   hand: (n) => /hand(l|r)?$/.test(n.replace(/^(left|right)/, "")) && !/thumb|index|middle|ring|pinky|finger/.test(n),
+  clav: (n) => /(shoulder|clavicle|collar)/.test(n),
+  jaw: (n) => /jaw/.test(n) && !/end/.test(n),
   upleg: (n) => /(upleg|thigh|upperleg)/.test(n),
   leg: (n) => /(leg|calf|shin|lowerleg|knee)(l|r)?$/.test(n.replace(/^(left|right)/, "")) && !/up|upper|thigh/.test(n),
   foot: (n) => /(foot|ankle)(l|r)?$/.test(n.replace(/^(left|right)/, "")),
@@ -40,10 +42,10 @@ function findBones(model) {
     return c[0];
   };
   const B = {
-    hips: pick("hips"), spine: pick("spine"), neck: pick("neck"), head: pick("head"),
-    L: { upper: pick("upperarm", "L"), fore: pick("forearm", "L"), hand: pick("hand", "L"),
+    hips: pick("hips"), spine: pick("spine"), neck: pick("neck"), head: pick("head"), jaw: pick("jaw"),
+    L: { clav: pick("clav", "L"), upper: pick("upperarm", "L"), fore: pick("forearm", "L"), hand: pick("hand", "L"),
          thigh: pick("upleg", "L"), shin: pick("leg", "L"), foot: pick("foot", "L") },
-    R: { upper: pick("upperarm", "R"), fore: pick("forearm", "R"), hand: pick("hand", "R"),
+    R: { clav: pick("clav", "R"), upper: pick("upperarm", "R"), fore: pick("forearm", "R"), hand: pick("hand", "R"),
          thigh: pick("upleg", "R"), shin: pick("leg", "R"), foot: pick("foot", "R") },
   };
   const missing = [];
@@ -186,15 +188,101 @@ export async function loadGlbRig(url, { flip = false } = {}) {
              rGogus: omuz * 0.42, rKalca: Math.max(kalcaG * 0.5 + 0.1, omuz * 0.45) };
   }
 
+  // ---- Canlı hareket (Mixamo kaydı olmadan, prosedürel): jest sırası, nefes, baş onayı, ağırlık aktarımı.
+  // Çıktıların hepsi yumuşatılır (damp); fizik sınırı kol IK'sinde uygulanır.
+  let DT = 1 / 60;
+  const dmp = (a, b, lam) => THREE.MathUtils.damp(a, b, lam, DT);
+  const C = { env: 0, loud: 0, nod: 0, nodT: 9, nextNod: 2, jest: "dinlen", jestUntil: 0, jestSeed: 0, isaret: 0, silent: 0,
+              el: { L: new THREE.Vector3(0.11, -0.53, 0.07), R: new THREE.Vector3(-0.11, -0.53, 0.07) },
+              govdeZ: 0, egil: 0, omuz: { L: 0, R: 0 }, basX: 0, basY: 0, basZ: 0, agirlik: 0, nefes: 0, hold: 0 };
+  function canli(p, dt, konusuyor) {
+    dt = Math.min(Math.max(dt || 0.016, 1e-3), 0.1); DT = dt;
+    const t = p.t || 0, lam = (k) => 1 - Math.exp(-k * dt);
+    // konuşma seviyesinin zarfı (hızlı yükselir, yavaş düşer)
+    const lv = p.mouth || 0;
+    C.env += (lv - C.env) * lam(lv > C.env ? 18 : 3.5);
+    // cümle sonu: yeterince uzun konuşmadan sonra sessizlik → başla hafif onay/eğilme
+    if (C.env > 0.22) { C.loud += dt; C.silent = 0; } else { C.silent += dt; }
+    if (C.loud > 0.8 && C.silent > 0.18) { C.nodT = 0; C.nod = 0.9; C.loud = 0; }
+    // arada (konuşurken ya da dinlerken) küçük onay başı sallama
+    C.nextNod -= dt;
+    if (C.nextNod <= 0) {
+      C.nextNod = 3 + Math.random() * 4;
+      if (konusuyor || p.state === "listening") { C.nodT = 0; C.nod = konusuyor ? 0.5 : 0.8; }
+    }
+    C.nodT += dt;
+    const nod = Math.exp(-3.2 * C.nodT) * Math.sin(C.nodT * 9) * C.nod;
+    // jest seçimi
+    if (konusuyor && t > C.jestUntil && !debug.zorla) {
+      const liste = ["acik", "say", "sag", "sol", "acik", "dinlen"];
+      if (p.pointAt) liste.push("isaret", "isaret");
+      C.jest = liste[Math.floor(Math.random() * liste.length)];
+      C.jestSeed = Math.random() * 6;
+      C.jestUntil = t + 1.8 + Math.random() * 2.6;
+    }
+    if (p.pointNow && p.pointAt) { C.jest = "isaret"; C.jestUntil = t + 2.4; }  // vurgu: yazılan öğeyi göster
+    if (!konusuyor && !debug.zorla) C.jest = "dinlen";
+    const a = 0.55 + C.env * 0.9;                 // konuşma yüksekse jestler büyür
+    const nb = Math.sin(t * 5.2 + C.jestSeed) * 0.02 * a;
+    const sol = { x: 0.11, y: -0.53, z: 0.07 }, sag = { x: -0.11, y: -0.53, z: 0.07 };
+    let L = sol, R = sag, isr = 0;
+    switch (C.jest) {
+      case "acik":   // iki elle avuç yukarı açıklama
+        L = { x: 0.2 + 0.03 * a, y: -0.13 + nb, z: 0.3 }; R = { x: -0.2 - 0.03 * a, y: -0.13 - nb, z: 0.3 }; break;
+      case "say": {  // sayma: sağ elde vurgu vuruşları, sol el açık
+        const adim = Math.floor(t * 1.6 + C.jestSeed) % 3;
+        R = { x: -0.12, y: -0.1 + adim * 0.06 + Math.abs(Math.sin(t * 3.2)) * 0.03, z: 0.32 }; L = { x: 0.16, y: -0.3, z: 0.2 }; break;
+      }
+      case "sag": R = { x: -0.26, y: -0.1 + nb, z: 0.3 }; L = { x: 0.1, y: -0.52, z: 0.08 }; break;
+      case "sol": L = { x: 0.26, y: -0.1 + nb, z: 0.3 }; R = { x: -0.1, y: -0.52, z: 0.08 }; break;
+      case "isaret": isr = 1; R = { x: -0.2, y: -0.15, z: 0.3 }; break;
+      default: L = { x: 0.12, y: -0.5 + nb * 0.5, z: 0.1 }; R = { x: -0.12, y: -0.5 - nb * 0.5, z: 0.1 };
+    }
+    for (const [k, h] of [["L", L], ["R", R]]) {
+      C.el[k].x = dmp(C.el[k].x, h.x, 5); C.el[k].y = dmp(C.el[k].y, h.y, 5); C.el[k].z = dmp(C.el[k].z, h.z, 5);
+    }
+    C.isaret = dmp(C.isaret, isr, 6);
+    const ritim = konusuyor ? C.env : 0;
+    const dinliyor = p.state === "listening", dusunuyor = !!p.think;
+    // baş: konuşma ritmine bağlı hafif vurgu + onay; dinlerken yana eğim (teacher3d'den) + yavaş sallanma
+    const bx = ritim * 0.045 * Math.sin(t * 7.3) + nod * 0.09 + (konusuyor ? Math.sin(t * 1.7) * 0.015 : 0);
+    const by = konusuyor ? Math.sin(t * 0.8 + 1) * 0.05 : (dinliyor ? Math.sin(t * 0.5) * 0.03 : 0);
+    const bz = konusuyor ? Math.sin(t * 1.3) * 0.03 * (0.4 + C.env) : (dinliyor ? Math.sin(t * 0.6) * 0.02 : 0);
+    C.basX = dmp(C.basX, bx, 12); C.basY = dmp(C.basY, by, 4); C.basZ = dmp(C.basZ, bz, 4);
+    C.egil = dmp(C.egil, nod * 0.025 + (konusuyor ? C.env * 0.012 : 0), 8);
+    C.govdeZ = dmp(C.govdeZ, konusuyor ? Math.sin(t * 1.1) * 0.012 * (0.5 + C.env) : 0, 3);
+    const omz = konusuyor ? C.env * 0.03 : 0;  // vurguda omuzlar hafif kalkar
+    C.omuz.L = dmp(C.omuz.L, omz + (C.jest === "sol" ? 0.03 : 0), 5); C.omuz.R = dmp(C.omuz.R, omz + (C.jest === "sag" || C.jest === "say" ? 0.03 : 0), 5);
+    // ağırlık aktarımı: yavaş, ara sıra yön değiştirir (yürürken yok); düşünürken belirgin
+    const ag = p.walking ? 0 : Math.sin(t * (dusunuyor ? 0.55 : 0.33)) * (dusunuyor ? 1 : 0.7);
+    C.agirlik = dmp(C.agirlik, ag, 1.5);
+    C.nefes = Math.sin(t * 1.45);
+    const rest = (k, r) => Math.abs(C.el[k].x - r.x) + Math.abs(C.el[k].y - r.y) + Math.abs(C.el[k].z - r.z);
+    const jestVar = rest("L", sol) > 0.035 || rest("R", sag) > 0.035 || C.isaret > 0.02;
+    return { ...C, nefes: C.nefes, agirlik: C.agirlik, omuz: C.omuz, jestVar };
+  }
+
   const debug = { B, last: null };
   return {
     root, headObj, debug, info: { bones: count, morphs: morphs.mouth.length > 0 },
     pose(p, dt) {
       root.updateMatrixWorld(true);
-      bob.position.y = p.bob;
-      // gövde ve baş
-      if (B.spine) turn(B.spine, root, new THREE.Euler(p.lean, 0, p.sway), 0.15);
-      turn(B.head, root, new THREE.Euler(p.head.x, p.head.y, p.head.z), 0.15);
+      const t = p.t || 0;
+      const konusuyor = (p.talkR || 0) > 0 && !p.walking;
+      if (debug.zorla) { C.jest = debug.zorla; C.jestUntil = Infinity; }
+      const G = canli(p, dt, konusuyor || !!debug.zorla);
+      bob.position.y = p.bob + G.nefes * 0.003;
+      bob.position.x = G.agirlik * 0.012;  // ağırlık aktarımı: gövde hafifçe yana kayar
+      // kalça (ağırlık aktarımı), gövde (nefes + konuşma ritmi), omuzlar, baş
+      if (B.hips) turn(B.hips, root, new THREE.Euler(0, 0, G.agirlik * 0.035), 0.1);
+      if (B.spine) turn(B.spine, root, new THREE.Euler(p.lean + G.nefes * 0.008 + G.egil, 0, p.sway - G.agirlik * 0.03 + G.govdeZ), 0.15);
+      for (const [side, sg] of [["L", 1], ["R", -1]]) {  // omuz kemikleri: nefes ve vurguda hafif kalkar
+        const c = B[side].clav;
+        if (c) turn(c, root, new THREE.Euler(0, 0, sg * (G.nefes * 0.012 + G.omuz[side])), 0.2);
+      }
+      turn(B.head, root, new THREE.Euler(p.head.x + G.basX, p.head.y + G.basY, p.head.z + G.basZ), 0.18);
+      if (B.neck) turn(B.neck, root, new THREE.Euler(G.basX * 0.5, G.basY * 0.4, G.basZ * 0.3), 0.18);
+      if (B.jaw) turn(B.jaw, root, new THREE.Euler(Math.min(0.32, p.mouth * 0.34), 0, 0), 0.5);  // çene kemiği konuşma seviyesiyle açılır
       root.updateMatrixWorld(true);
 
       // bacaklar (adım): ayak hedefi kalçanın altında, adım açısıyla öne/arkaya
@@ -217,7 +305,9 @@ export async function loadGlbRig(url, { flip = false } = {}) {
       };
       // Basit fizik: gövde bir kapsül; el ve dirsek hedefi içine düşerse yüzeyine itilir (içinden geçmez)
       const govde = govdeKapsulu();
-      const disari = (pt) => {
+      const tahtaZ = (pt) => { if (pt.z < 0.045) pt.z = 0.045; return pt; };  // tahta düzleminin arkasına geçme
+      const disari = (pt) => tahtaZ(disari0(pt));
+      const disari0 = (pt) => {
         const ax = govde.alt, ust = govde.ust;
         const yon = ust.clone().sub(ax), uz = yon.length(); yon.normalize();
         const t = THREE.MathUtils.clamp(pt.clone().sub(ax).dot(yon), 0, uz);
@@ -237,6 +327,12 @@ export async function loadGlbRig(url, { flip = false } = {}) {
       const kol = (side, target, pole, k) => {
         const L = B[side];
         twoBone(L.upper, L.fore, L.hand, disari(target), pole, k, disari);
+        // tanılama: el, dirsek ve ön kol ortasının gövde kapsülüne ne kadar girdiği (m) ve tahta düzlemi
+        const E = L.fore.getWorldPosition(new THREE.Vector3()), H = L.hand.getWorldPosition(new THREE.Vector3());
+        const O = E.clone().lerp(H, 0.5);
+        const pen = Math.max(...[E, H, O].map((q) => disari0(q.clone()).distanceTo(q)));
+        debug.pen = Math.max(debug.pen || 0, pen); debug.minZ = Math.min(debug.minZ ?? 9, H.z, O.z);
+        debug.last = { side, pen, handZ: H.z };
       };
       if (p.reachR) {
         kol("R", p.reachR, rootDir(0.3, -1, -0.5), 0.4);
@@ -246,6 +342,18 @@ export async function loadGlbRig(url, { flip = false } = {}) {
         const chin = headObj.getWorldPosition(new THREE.Vector3()).add(rootDir(-0.02, -0.13, 0.2));
         kol("R", chin, rootDir(-0.2, -1, 0.45), 0.25);
         kol("L", relaxTarget("L", 0, 0), rootDir(0, -0.3, -1), 0.15);
+      } else if (konusuyor || G.jestVar || debug.zorla) {
+        // Açıklama jestleri: eller kök uzayında yumuşakça (damping) hedefe gider, hedef her an fizik sınırından geçer
+        for (const side of ["L", "R"]) {
+          const o = G.el[side];
+          const hedef = shoulderPos(side).add(rootDir(o.x, o.y, o.z));
+          if (G.isaret && side === "R" && p.pointAt) {  // tahtadaki son öğeyi işaret et (kol uzanır, temas yok)
+            const yon = p.pointAt.clone().sub(shoulderPos("R")); yon.y *= 0.6; yon.normalize();
+            hedef.copy(shoulderPos("R")).addScaledVector(yon, 0.5 * G.isaret);
+            hedef.lerp(shoulderPos(side).add(rootDir(o.x, o.y, o.z)), 1 - G.isaret);
+          }
+          kol(side, hedef, rootDir(side === "L" ? 0.25 : -0.25, -0.3, -1), 0.2);
+        }
       } else {
         kol("R", relaxTarget("R", p.talkR, p.swing), rootDir(0, -0.3, -1), 0.15);
         kol("L", relaxTarget("L", p.talkL, p.swing), rootDir(0, -0.3, -1), 0.15);
@@ -254,7 +362,6 @@ export async function loadGlbRig(url, { flip = false } = {}) {
       // ağız ve göz kırpma (şekil anahtarı varsa); yoksa konuşurken başı hafifçe sallanır
       for (const [o, i] of morphs.mouth) o.morphTargetInfluences[i] = THREE.MathUtils.damp(o.morphTargetInfluences[i], p.mouth, 18, dt);
       for (const [o, i] of morphs.blink) o.morphTargetInfluences[i] = p.blink ? 1 : 0;
-      if (!morphs.mouth.length && p.mouth > 0.05) turn(B.head, root, new THREE.Euler(p.head.x + p.mouth * 0.06, p.head.y, p.head.z), 0.3);
     },
   };
 }

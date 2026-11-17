@@ -77,6 +77,9 @@ DEFAULTS = {
     "tts_provider": os.getenv("TTS_PROVIDER", "edge"),  # edge (ücretsiz) | xtts (ücretsiz klon) | browser | elevenlabs (ücretli, isteğe bağlı)
     "edge_voice": "tr-TR-AhmetNeural",
     "_ses_v2": False,  # bir kerelik ses geçişi yapıldı mı
+    "_ses_v3": False,  # ikinci bir kerelik geçiş: örneksiz xtts/piper/browser → Edge Ahmet
+    "edge_rate": "+4%",
+    "edge_pitch": "-2Hz",
     "stt_provider": os.getenv("STT_PROVIDER", "whisper"),  # whisper (ücretsiz) | elevenlabs (ücretli, isteğe bağlı)
     "whisper_model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),  # small = hızlı, large-v3-turbo = isabetli
     "web_search": False,  # hoca gerektiğinde internette arama yapabilsin
@@ -111,6 +114,16 @@ def load_settings() -> dict:
         if s.get("tts_provider") in ("xtts", "elevenlabs") or s.get("edge_voice") == "tr-TR-EmelNeural":
             s["tts_provider"], s["edge_voice"] = "edge", "tr-TR-AhmetNeural"
         s["_ses_v2"] = True
+        try:
+            _SETTINGS_FILE.write_text(json.dumps({k: v for k, v in s.items() if k in DEFAULTS},
+                                                 ensure_ascii=False, indent=2), "utf-8")
+        except OSError:
+            pass
+    if not s.get("_ses_v3"):
+        # Sesler robotik bulundu: ses örneği yokken xtts/piper/tarayıcı seçili kalmışsa doğal Edge sesine geç
+        if s.get("tts_provider") in ("xtts", "piper", "browser") and not (DATA_DIR / "ses_ornegi.wav").exists():
+            s["tts_provider"], s["edge_voice"] = "edge", "tr-TR-AhmetNeural"
+        s["_ses_v3"] = True
         try:
             _SETTINGS_FILE.write_text(json.dumps({k: v for k, v in s.items() if k in DEFAULTS},
                                                  ensure_ascii=False, indent=2), "utf-8")
