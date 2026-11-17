@@ -234,7 +234,7 @@ export function mount({ root, board, teacher2d, onError }) {
 
   // ---------------- durum
   const S = { state: "idle", yaw: 0, walkPhase: 0, approach: null, approachUntil: 0, nextBlink: 2, blinkUntil: 0,
-              lastState: "idle", stateSince: 0, head: { x: 0, y: 0, z: 0 } };
+              lastState: "idle", stateSince: 0, pointUntil: 0, boardPt: null, boardPtAt: -9, head: { x: 0, y: 0, z: 0 } };
   const target = new THREE.Vector3().copy(HOME);
   const hand = new THREE.Vector3();
 
@@ -273,6 +273,7 @@ export function mount({ root, board, teacher2d, onError }) {
       S.approachUntil = clock.elapsedTime + 4 + Math.random() * 3;
     }
     if (s !== "talking") S.approach = null;
+    if (S.lastState === "writing" && s === "talking") S.pointUntil = clock.elapsedTime + 2.6;  // yazdığını göster
   }
 
   // ---------------- döngü
@@ -292,6 +293,8 @@ export function mount({ root, board, teacher2d, onError }) {
     if (pen) {
       target.set(THREE.MathUtils.clamp(pen.standX + 0.26, -1.7, 1.9), 0, 0.36);  // kol (~0.58 m) tahtaya yetişsin
       faceYaw = Math.PI;
+    } else if (st === "talking" && t < S.pointUntil) {
+      target.copy(T.root.position); target.y = 0;  // yazdığını gösterirken yerinden ayrılma
     } else if (st === "talking" && S.approach && t < S.approachUntil) {
       target.copy(S.approach);
     } else if (st === "talking" || st === "listening" || st === "thinking") {
@@ -321,16 +324,18 @@ export function mount({ root, board, teacher2d, onError }) {
 
     // poz: ne yapılacağını hesapla, iskelete (kodla çizilen ya da GLB) uygula
     let headX = 0, headZ = 0, headY = 0;
-    if (st === "listening") { headZ = 0.14; headX = 0.06; }
+    if (st === "listening") { headZ = 0.16 + Math.sin(t * 0.4) * 0.02; headX = 0.05; }
     if (st === "thinking") { headX = -0.18; headZ = -0.06; }
     if (st === "talking") { headX = Math.sin(t * 2.3) * 0.05; headY = Math.sin(t * 0.9) * 0.12; }
     if (pen) { headX = (pen.y - 1.55) * -0.35; headZ = 0.05; }
     S.head.x = damp(S.head.x, headX, 5, dt); S.head.y = damp(S.head.y, headY, 5, dt); S.head.z = damp(S.head.z, headZ, 5, dt);
     const talkingNow = st === "talking" || st === "writing";
+    if (st === "talking" && !walking && t - S.boardPtAt > 0.5) { S.boardPt = penWorld(); S.boardPtAt = t; }
     const talk = st === "talking" && !walking ? 0.35 + level * 0.6 : 0;
     if (t > S.nextBlink) { S.blinkUntil = t + 0.11; S.nextBlink = t + 2.5 + Math.random() * 3.5; }
     rig.pose({
-      t, walking, walkPhase: S.walkPhase,
+      t, walking, walkPhase: S.walkPhase, state: st,
+      pointAt: st === "talking" && !walking ? S.boardPt : null, pointNow: t < S.pointUntil,
       bob: walking ? Math.abs(Math.cos(S.walkPhase)) * 0.025 : Math.sin(t * 1.6) * 0.004,
       sway: walking ? Math.sin(S.walkPhase) * 0.03 : 0,
       lean: st === "listening" ? 0.06 : 0,
@@ -386,7 +391,7 @@ export function mount({ root, board, teacher2d, onError }) {
   requestAnimationFrame(frame);
 
   // 2B hocayla aynı arayüz: uygulamanın geri kalanı değişmeden çalışır
-  return {
+  const api = {
     setState(s) { setState(s); teacher2d.setState(s); },
     unlock() { teacher2d.unlock(); },
     attachAudio(a) { return teacher2d.attachAudio(a); },
@@ -401,4 +406,6 @@ export function mount({ root, board, teacher2d, onError }) {
       css.domElement.remove(); gl.domElement.remove(); gl.dispose();
     },
   };
+  window.__hocaCtl = { api, teacher2d, S };  // tanılama için
+  return api;
 }
