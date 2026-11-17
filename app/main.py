@@ -38,6 +38,15 @@ def _setup_file_log() -> None:
     root.addHandler(h)
     for name in ("uvicorn.error", "ders"):
         logging.getLogger(name).addHandler(h)
+    import sys as _sys
+    import threading as _thr
+
+    def _yakala(tip, deger, iz):  # yakalanmamış her hata dosyaya yazılsın (gece çökmelerinin izi için)
+        logging.getLogger("ders").error("yakalanmamış hata", exc_info=(tip, deger, iz))
+
+    _sys.excepthook = _yakala
+    _thr.excepthook = lambda a: a.exc_type is not SystemExit and logging.getLogger("ders").error(
+        "iş parçacığında yakalanmamış hata (%s)", getattr(a.thread, "name", "?"), exc_info=(a.exc_type, a.exc_value, a.exc_traceback))
 
 
 _setup_file_log()
@@ -156,6 +165,10 @@ _calisma_gorevi: asyncio.Task | None = None
 @app.on_event("startup")
 async def _warm_up():
     """Ücretsiz konuşma tanıma (Whisper) modelini açılışta arka planda hazırla (ilk seferde ~1.6 GB iner)."""
+    def _dongu_hatasi(loop, ctx):  # arka plan görevlerindeki yakalanmamış hatalar sunucu.log'a
+        log.error("arka plan görevi hatası: %s", ctx.get("message"), exc_info=ctx.get("exception"))
+
+    asyncio.get_running_loop().set_exception_handler(_dongu_hatasi)
     try:
         paket.acilista_duzelt()  # kapanırken yarıda kalan paket üretimleri "yarida" görünsün
     except Exception:
@@ -224,6 +237,54 @@ async def yerel_hazirla(body: dict | None = None):
 
 
 LAST_PING = [0.0]  # uygulama penceresinden son "buradayım" zamanı (başlatıcı pencere kapanınca sunucuyu kapatır)
+YENIDEN_BASLAT = [False]  # başlatıcı bunu görünce sunucuyu kapatır, güncelleyip yeniden açar
+_guncel_onbellek: dict = {"zaman": 0.0, "sonuc": None}
+
+
+def _surum_denetle() -> dict:
+    """GitHub'daki son sürüm bu kurulumdan yeni mi? (10 dk önbellekli; internet yoksa yeni=False)"""
+    import time as _t
+
+    if _guncel_onbellek["sonuc"] is not None and _t.time() - _guncel_onbellek["zaman"] < 600:
+        return _guncel_onbellek["sonuc"]
+    sonuc = {"yeni": False, "mesaj": "", "simdiki": ""}
+    try:
+        import subprocess as _sp
+        import sys as _sys
+
+        if str(ROOT) not in _sys.path:
+            _sys.path.insert(0, str(ROOT))
+        import guncelle
+
+        if (ROOT / ".git").exists():
+            simdiki = _sp.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=10,
+                              creationflags=0x08000000 if os.name == "nt" else 0).stdout.strip()
+        else:
+            simdiki = guncelle.load_state().get("sha", "")
+        sha, mesaj = guncelle.latest_commit()
+        sonuc = {"yeni": bool(sha and simdiki and sha != simdiki), "mesaj": mesaj, "simdiki": simdiki[:7]}
+    except Exception as e:
+        sonuc["hata"] = f"{type(e).__name__}"
+    _guncel_onbellek.update(zaman=_t.time(), sonuc=sonuc)
+    return sonuc
+
+
+@app.get("/api/guncelle/durum")
+async def guncelle_durum():
+    d = dict(await asyncio.to_thread(_surum_denetle))
+    d["baslatici"] = os.getenv("DERS_BASLATICI") == "1"
+    d["mesgul"] = not llm.ogrenci_bosta(20)  # anlatım sürüyorsa kendiliğinden yeniden başlatma
+    return d
+
+
+@app.post("/api/guncelle/yeniden-baslat")
+async def guncelle_yeniden_baslat(request: Request):
+    if not auth.is_local(request):
+        raise HTTPException(403, "Yalnızca bilgisayardan yapılabilir.")
+    if os.getenv("DERS_BASLATICI") != "1":
+        raise HTTPException(409, "Uygulama başlatıcıyla açılmamış; kapatıp 'Ders Anlatıcı' kısayoluyla yeniden aç.")
+    YENIDEN_BASLAT[0] = True
+    return {"ok": True}
 
 
 @app.post("/api/ping")
@@ -960,7 +1021,7 @@ async def ask(
     user_msg = {"role": "user", "content": content}
 
     kaynak_txt = await _kaynak_bolumleri(course, text.strip() or user_text)
-    nt = notes.notes_context(course, user_text, focus, limit=llm.notes_limit() - len(kaynak_txt))
+    nt = await asyncio.to_thread(notes.notes_context, course, user_text, focus, limit=llm.notes_limit() - len(kaynak_txt))
     soru_metni = text.strip() or user_text
     ogrenme_txt = ""
     tarz = "anlat"
@@ -968,9 +1029,12 @@ async def ask(
         if text.strip():
             ogrenme.profil_say(text, not_mu=False)
         try:
-            ogrenme_txt = "\n\n".join(b for b in (
-                ogrenme.ogrenme_blogu(course_id or None, soru_metni),
-                calisma.dogrulanmis_blok(course, soru_metni)) if b)
+            def _bloklar() -> str:
+                return "\n\n".join(b for b in (
+                    ogrenme.ogrenme_blogu(course_id or None, soru_metni),
+                    calisma.dogrulanmis_blok(course, soru_metni)) if b)
+
+            ogrenme_txt = await asyncio.to_thread(_bloklar)
         except Exception:
             log.exception("öğrenme blokları kurulamadı")
         tarz = "sokratik" if settings.get("ogretme_tarzi") == "sokratik" else "anlat"

@@ -602,6 +602,15 @@ def _cikar(kid: str, uzanti: str, ad: str) -> dict:
     return _duz_oku(veri, ad, uzanti)
 
 
+async def _db_is(fn):
+    """Veritabanı işini iş parçacığında yapar: kilit başka iş parçacığındayken olay döngüsü (arayüz) donmasın."""
+    def _calis():
+        with _kilit:
+            return fn(_db())
+
+    return await asyncio.to_thread(_calis)
+
+
 async def _ocr_sayfalar(kid: str, bos: list[int]) -> dict[int, str]:
     """(ayar kutuphane_ocr açıksa) metin katmanı olmayan PDF sayfalarını yerel yapay zekayla okur. Yavaştır."""
     from . import llm
@@ -635,8 +644,7 @@ async def _kaynak_isle(r: dict) -> None:
     from . import klasor
 
     kid = r["id"]
-    with _kilit:
-        _db().execute("UPDATE kaynaklar SET durum='isleniyor', hata='' WHERE id=?", (kid,))
+    await _db_is(lambda c: c.execute("UPDATE kaynaklar SET durum='isleniyor', hata='' WHERE id=?", (kid,)))
     _islem["mesaj"] = f"Okunuyor: {r['baslik']}"
     try:
         bilgi = await asyncio.to_thread(_cikar, kid, r["uzanti"] or "", r["dosya"] or "")
@@ -660,10 +668,10 @@ async def _kaynak_isle(r: dict) -> None:
                 p["sayfa"] = None
         ornek = "\n".join(p["metin"] for p in parcalar[:40])
         dersler = await asyncio.to_thread(ders_etiketle, ornek, bilgi["baslik"])
-        with _kilit:
-            c = _db()
+
+        def _yaz(c) -> bool:
             if not c.execute("SELECT 1 FROM kaynaklar WHERE id=?", (kid,)).fetchone():
-                return  # işlenirken silindi
+                return False  # işlenirken silindi
             c.execute("BEGIN")
             try:
                 c.execute("UPDATE kaynaklar SET baslik=?, yazar=?, yil=?, dil=?, sayfa_sayisi=?, parca_sayisi=?, "
@@ -675,6 +683,10 @@ async def _kaynak_isle(r: dict) -> None:
             except Exception:
                 c.execute("ROLLBACK")
                 raise
+            return True
+
+        if not await _db_is(_yaz):
+            return
         if not load_settings().get("kutuphane_dosya_sakla", False):
             # Öğrenildi: metin ve sayfa numaraları veritabanında; kopyaya gerek yok (yer kaplamasın)
             try:
@@ -686,8 +698,8 @@ async def _kaynak_isle(r: dict) -> None:
         klasor.olay("kutuphane", f"📚 Kütüphaneye eklendi: {bilgi['baslik']} ({boy})")
     except Exception as e:
         log.warning("kütüphane kaynağı işlenemedi: %s: %s", kid, e)
-        with _kilit:
-            _db().execute("UPDATE kaynaklar SET durum='hata', hata=? WHERE id=?", (str(e) or type(e).__name__, kid))
+        await _db_is(lambda c: c.execute("UPDATE kaynaklar SET durum='hata', hata=? WHERE id=?",
+                                          (str(e) or type(e).__name__, kid)))
         klasor.olay("hata", f"⚠ Kütüphaneye eklenemedi: {r['baslik']}: {e}")
 
 
@@ -695,9 +707,9 @@ async def isle_bekleyenler() -> int:
     """Kuyruktaki (ve yarım kalmış) dosyaları sırayla işler."""
     n = 0
     while True:
-        with _kilit:
-            r = _db().execute("SELECT * FROM kaynaklar WHERE durum IN ('bekliyor','isleniyor') AND uzanti IS NOT NULL "
-                              "AND uzanti != '' ORDER BY eklenme LIMIT 1").fetchone()
+        r = await _db_is(lambda c: c.execute(
+            "SELECT * FROM kaynaklar WHERE durum IN ('bekliyor','isleniyor') AND uzanti IS NOT NULL "
+            "AND uzanti != '' ORDER BY eklenme LIMIT 1").fetchone())
         if not r:
             break
         _islem["aktif"] = True
@@ -782,9 +794,8 @@ async def gomme_tamamla() -> int:
     from . import llm
 
     model = gomme_modeli()
-    with _kilit:
-        kalan = _db().execute("SELECT COUNT(*) FROM parcalar WHERE vektor IS NULL OR gomme_modeli IS NOT ?",
-                              (model,)).fetchone()[0]
+    kalan = await _db_is(lambda c: c.execute(
+        "SELECT COUNT(*) FROM parcalar WHERE vektor IS NULL OR gomme_modeli IS NOT ?", (model,)).fetchone()[0])
     if not kalan:
         _gomme["hazir"] = True
         return 0
@@ -797,10 +808,9 @@ async def gomme_tamamla() -> int:
     yapilan, atla = 0, set()
     while True:
         await llm.arka_plan_sirasi()
-        with _kilit:
-            satirlar = _db().execute(
-                "SELECT id, metin FROM parcalar WHERE (vektor IS NULL OR gomme_modeli IS NOT ?) ORDER BY id LIMIT ?",
-                (model, TOPLU + len(atla))).fetchall()
+        satirlar = await _db_is(lambda c: c.execute(
+            "SELECT id, metin FROM parcalar WHERE (vektor IS NULL OR gomme_modeli IS NOT ?) ORDER BY id LIMIT ?",
+            (model, TOPLU + len(atla))).fetchall())
         satirlar = [s for s in satirlar if s["id"] not in atla][:TOPLU]
         if not satirlar:
             break
@@ -819,13 +829,15 @@ async def gomme_tamamla() -> int:
             if not sonuc:
                 _gomme.update(hazir=False, son_hata=time.time(), mesaj="Gömme yapılamadı; kelime aramasıyla çalışıyor.")
                 break
-        with _kilit:
-            c = _db()
+        def _vek_yaz(c) -> None:
+            global _surum
             c.execute("BEGIN")
             c.executemany("UPDATE parcalar SET vektor=?, gomme_modeli=? WHERE id=?",
                           [(v.astype(np.float32).tobytes(), model, s["id"]) for s, v in sonuc])
             c.execute("COMMIT")
             _surum += 1
+
+        await _db_is(_vek_yaz)
         yapilan += len(sonuc)
     if yapilan:
         _gomme.update(hazir=True, mesaj="")
@@ -856,16 +868,15 @@ def _durt() -> None:
 async def _dongu() -> None:
     global _uyandir
     _uyandir = asyncio.Event()
-    with _kilit:  # kapanırken yarıda kalanlar baştan işlenir
-        _db().execute("UPDATE kaynaklar SET durum='bekliyor' WHERE durum='isleniyor'")
+    # kapanırken yarıda kalanlar baştan işlenir
+    await _db_is(lambda c: c.execute("UPDATE kaynaklar SET durum='bekliyor' WHERE durum='isleniyor'"))
     while True:
         _uyandir.clear()  # işten ÖNCE sıfırla: iş sürerken gelen sinyal kaybolmasın
         try:
             await isle_hepsi()
         except Exception:
             log.exception("kütüphane işleyici hatası")
-        with _kilit:
-            bekleyen = _db().execute("SELECT 1 FROM kaynaklar WHERE durum='bekliyor' LIMIT 1").fetchone()
+        bekleyen = await _db_is(lambda c: c.execute("SELECT 1 FROM kaynaklar WHERE durum='bekliyor' LIMIT 1").fetchone())
         if bekleyen and not _uyandir.is_set():
             await asyncio.sleep(1)  # iş sırasında eklenen kaynak var: beklemeden devam
             continue
