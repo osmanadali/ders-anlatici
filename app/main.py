@@ -1337,3 +1337,8 @@ async def manifest():
 @app.get("/favicon.ico")
 async def favicon():
     return Response(status_code=204)
+
+
+from . import calis as _calis  # noqa: E402
+
+app.include_router(_calis.router)  # Çalış sekmesi (hatalar, kartlar, simülasyon, hesap alanı, özet kartı)
