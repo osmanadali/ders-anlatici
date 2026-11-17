@@ -33,6 +33,8 @@
   const player = new Player(board, {
     onStep(step) {
       $("#caption").textContent = step.say || "";
+      if (teacher3d && (step.board || []).some((o) => o && o.op && o.op !== "newpage")) window.Sesler?.adim(2);  // hoca tahtaya yürürken
+      window.DersUI?.altyazi?.(step.say || "");
       if (step.say) { S.recentSays.push({ say: step.say, t: Date.now() }); S.recentSays = S.recentSays.slice(-4); }
       if (S.tutorBubble && step.say) {
         S.tutorBubble.textContent += (S.tutorBubble.textContent ? " " : "") + step.say;
@@ -41,6 +43,8 @@
     },
     onState(st) {
       $("#playBtn").textContent = st === "paused" ? "▶" : "⏸";
+      if (st !== "playing") window.Sesler?.konusuyor(false);
+      window.DersUI?.oynatici?.(st);
       if (st === "idle") teacher.setState(S.streamOpen ? "thinking" : S.conv ? "listening" : "idle");
       if (st === "paused" && !S.convPaused && !S.micPausedPlayer) teacher.setState("idle");
     },
@@ -54,6 +58,7 @@
     },
     onAudio(audio) { teacher.fakeTalk = !audio || !teacher.attachAudio(audio); },
     onSpeak(on, drawing) {
+      window.Sesler?.konusuyor(on);
       if (on) { teacher.setState(drawing ? "writing" : "talking"); teacherStatus(""); }
       else S.lastSpeechEnd = Date.now();
     },
@@ -102,6 +107,16 @@
     }
     return r.headers.get("content-type")?.includes("json") ? r.json() : r;
   }
+  // Modüller (Calis / Guncel) için ortak bağlam: her zaman güncel dersi gösterir
+  const ctx = {
+    get courseId() { return S.courseId; },
+    get course() { return S.course; },
+    get sessionId() { return S.sessionId; },
+    api, toast,
+    postJSON: (path, body) => postJSON(path, body),
+    ask: (o) => { switchTab("chat"); return ask(typeof o === "string" ? { text: o } : o); },
+  };
+  window.DersCtx = ctx;
   const postJSON = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   function dropEmptyBubble() {
     if (S.tutorBubble && !S.tutorBubble.textContent.trim()) S.tutorBubble.remove();
@@ -157,16 +172,15 @@
     return d;
   }
   function switchTab(name) {
-    document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
+    name = window.DersUI?.show(name) || name;   // üst bölüm + alt sekme seçimi arayüz.js'de
     if (name === "library") libLoad(); else { clearTimeout(libTimer); libTimer = null; }
     if (name === "records") loadRecords();
     if (name === "quiz") loadWeak();
     if (name === "plan") loadPlanTab();
   }
-  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => switchTab(b.dataset.tab)));
 
   // ================================================================ anlatım isteği (SSE akışı)
+  const YURUYUS_NOTU = "(Yürürken dinliyorum; ekrana bakmıyorum, görsel ifadeler kullanma, formülleri sözle oku.)";
   async function ask({ text = "", mode = "chat", doc_id = "", page = 0, section = null, files = [], label = "" }) {
     teacher.unlock();
     let interrupted = "";
@@ -188,10 +202,12 @@
     fd.append("page", String(page || 0));
     if (section) fd.append("section", JSON.stringify(section));
     if (interrupted) fd.append("interrupted", interrupted);
-    if (S.conv) fd.append("style", "konusma");
+    if (S.conv) fd.append("style", "konusma");   // yürürken ders de bu üslubu kullanır (kısa, sözlü)
+    S.adimSayisi = 0;
+    if (S.walk) text = YURUYUS_NOTU + " " + text, fd.set("text", text);
     files.forEach((f) => fd.append("files", f, f.name));
 
-    const shown = label || text || (doc_id ? `Sayfa ${page}` : "");
+    const shown = label || (S.walk ? text.replace(YURUYUS_NOTU + " ", "") : text) || (doc_id ? `Sayfa ${page}` : "");
     addMsg("user", shown + (ctx && mode === "chat" ? `  (📄 ${ctx.label})` : ""), files.map((f) => f.name));
     dropEmptyBubble();
     S.tutorBubble = addMsg("tutor", "");
@@ -241,14 +257,29 @@
     }
   }
 
+  // Ders sonrası özet kartı: en az 3 adım anlatıldıysa sohbetin altına kapsayıcı koyup Calis modülüne çizdir
+  function ozetKartiKoy() {
+    if (!window.Calis?.ozetKarti || (S.adimSayisi || 0) < 3 || !S.sessionId) return;
+    document.querySelectorAll(".ozet-kart-kap").forEach((e) => e.remove());
+    const el = document.createElement("div");
+    el.className = "ozet-kart-kap";
+    $("#chatLog").appendChild(el);
+    scrollChat();
+    try { Promise.resolve(window.Calis.ozetKarti(el, ctx)).catch(() => {}).then(() => { if (!el.childNodes.length) el.remove(); else scrollChat(); }); }
+    catch (e) { console.warn("özet kartı", e); el.remove(); }
+  }
+
   function handleEvent(ev) {
     switch (ev.type) {
       case "session": S.sessionId = ev.id; S.turSira = ev.sira; break;
-      case "done": addFeedbackBar(S.tutorBubble, S.sessionId, S.turSira); break;
-      case "step": player.enqueue(ev); break;
+      case "done": addFeedbackBar(S.tutorBubble, S.sessionId, S.turSira); ozetKartiKoy(); break;
+      case "step": if (!ev.filler) S.adimSayisi = (S.adimSayisi || 0) + 1; player.enqueue(ev); break;
       case "memory": toast(`Not aldım: “${ev.topic}” konusunu tekrar edeceğiz.`); break;
       case "notice": toast(ev.message); break;
-      case "hesap": {  // hesap aracı çalıştı: sohbette küçük rozet
+      case "hesap": {
+        if (window.Calis?.indirmeDugmeleri) {  // sonucun altına indirme düğmeleri
+          try { const d = window.Calis.indirmeDugmeleri(ev.arac, ev.girdi, ctx); if (d) setTimeout(() => { (S.tutorBubble || $("#chatLog")).after?.(d); scrollChat(); }, 0); } catch (e) { console.warn(e); }
+        }  // hesap aracı çalıştı: sohbette küçük rozet
         const rz = document.createElement("div");
         rz.className = "hesap-rozet";
         rz.textContent = ev.message || ("🧮 Hesaplandı: " + (ev.baslik || ev.arac));
@@ -576,6 +607,7 @@
     renderDocs();
     loadWeak();
     if ($("#tab-plan").classList.contains("active")) loadPlanTab();
+    window.DersUI?.dersDegisti();
   }
   function renderRehber() {
     const rb = $("#rehberBox");
@@ -890,6 +922,7 @@
     if (y.progress != null) $("#yerelBar").value = y.progress;
     chip.classList.toggle("hidden", y.state === "hazir" || y.state === "bilinmiyor");
     chip.textContent = y.state === "hata" ? "⚠ Yapay zeka" : `🧠 Kuruluyor${pct}`;
+    chip.dataset.durum = y.state;
     chip.title = txt;
     if (y.hw) $("#yerelHw").textContent = `Bilgisayar: ${y.hw.ram_gb} GB bellek` + (y.hw.vram_gb ? `, ${y.hw.vram_gb} GB ekran kartı` : ", ekran kartı yok") + `, ${y.hw.disk_gb} GB boş disk`;
     if (fillSelect) {
@@ -1553,6 +1586,8 @@
     $("#setKendiCalisma").checked = st.kendi_calisma !== false;
     $("#setHesap").checked = st.hesap_araclari !== false;
     $("#set3d").checked = localGet("hoca3d") !== "0";
+    $("#setSinifSes").checked = localGet("sinifSes") !== "0";
+    $("#setSinifSesVol").value = localGet("sinifSesVol") ?? "0.35";
     $("#setConvStt").value = localGet("convStt") === "whisper" || !window.BrowserConversation?.available() ? "whisper" : "browser";
     ["keyGemini", "keyEleven"].forEach((id) => ($("#" + id).value = ""));
     refreshYerel(true);
@@ -1656,10 +1691,18 @@
     });
     localSet("sens", $("#setSens").value);
     localSet("hoca3d", $("#set3d").checked ? "1" : "0");
+    localSet("sinifSes", $("#setSinifSes").checked ? "1" : "0");
+    localSet("sinifSesVol", $("#setSinifSesVol").value);
+    window.Sesler?.ayarDegisti();
     localSet("convStt", $("#setConvStt").value);
     enable3D($("#set3d").checked);
     if (S.conv) S.conv.sensitivity = Number($("#setSens").value);
     toast("Ayarlar kaydedildi.");
+  };
+
+  $("#setSinifSes").onchange = $("#setSinifSesVol").oninput = () => {  // anında dene
+    localSet("sinifSes", $("#setSinifSes").checked ? "1" : "0"); localSet("sinifSesVol", $("#setSinifSesVol").value);
+    window.Sesler?.ayarDegisti(); window.Sesler?.ac(); window.Sesler?.ornek();
   };
 
   // ---------------- 3B hoca modeli (GLB)
@@ -1681,13 +1724,14 @@
   // ---------------- tema: otomatik → açık → koyu
   const THEMES = [["", "🌓", "Tema: otomatik (sistem)"], ["light", "☀️", "Tema: açık (kâğıt)"], ["dark", "🌙", "Tema: koyu (gece)"]];
   function applyTheme(t) {
+    t = { kagit: "light", gece: "dark" }[t] || t;
     if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
     const [, icon, title] = THEMES.find((x) => x[0] === t) || THEMES[0];
     $("#themeBtn").textContent = icon; $("#themeBtn").title = title;
   }
   applyTheme(localGet("tema") || "");
   $("#themeBtn").onclick = () => {
-    const cur = localGet("tema") || "";
+    const cur = { kagit: "light", gece: "dark" }[localGet("tema")] || localGet("tema") || "";
     const next = THEMES[(THEMES.findIndex((x) => x[0] === cur) + 1) % THEMES.length][0];
     localSet("tema", next); applyTheme(next); toast(THEMES.find((x) => x[0] === next)[2], 2000);
   };
@@ -1718,10 +1762,31 @@
 
   // ================================================================ başlat
   loadSettings().catch(() => {});
+  window.DersCore = { S, $, api, postJSON, toast, ask, ctx, player, board, switchTab, openRecord, taskEl, localDate, goreli,
+    toggleConversation, get teacher() { return teacher; }, get teacher3d() { return teacher3d; }, localGet, localSet, scrollChat, loadPlanTab };
   // Masaüstü uygulaması: pencere açık olduğu sürece sunucuya "buradayım" de (kapanınca sunucu kendini kapatır)
   const ping = () => fetch("/api/ping", { method: "POST" }).catch(() => {});
   ping(); setInterval(ping, 20000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) ping(); });
+  // Güncelleme denetimi (Ayarlar > Yapay zeka + üst çubuk hapı)
+  async function guncelleDenetle() {
+    const d = $("#guncelleDurum");
+    try {
+      const g = await api("/api/guncelle/durum");
+      $("#guncelleChip").classList.toggle("hidden", !g.yeni);
+      $("#guncelleBtn").classList.toggle("hidden", !g.yeni);
+      d.textContent = g.yeni ? "Yeni sürüm: " + (g.mesaj || "") : (g.baslatici === false ? "Güncelleme bu kurulumda kullanılamıyor." : "Güncelsin.");
+      $("#guncelleBtn").disabled = !!g.mesgul;
+    } catch { d.textContent = "Güncelleme durumu alınamadı."; }
+  }
+  async function guncelleYap() {
+    if (!confirm("Güncellenip yeniden başlatılsın mı? Birkaç dakika sürebilir.")) return;
+    try { await postJSON("/api/guncelle/yeniden-baslat", {}); } catch (e) { if (!baglantiYok) { toast("Güncellenemedi: " + e.message); return; } }
+    baglantiKoptu();
+  }
+  $("#guncelleChip").onclick = $("#guncelleBtn").onclick = guncelleYap;
+  guncelleDenetle();
+  window.addEventListener("calis:git", (e) => switchTab(e.detail?.hedef === "hatalar" ? "hatalar" : "kartlar"));
   // Güncellemeden sonraki ilk açılışta neyin yenilendiğini söyle
   api("/api/version").then((v) => {
     if (v.sha && localGet("seenVersion") !== v.sha) {

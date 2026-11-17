@@ -19,25 +19,36 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/icon-192.png">
 <meta name="theme-color" content="#2c7362">
-<script>try { const t = localStorage.getItem("ders.tema"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}</script>
+<script>try { let t = localStorage.getItem("ders.tema"); if (t === "kagit") t = "light"; if (t === "gece") t = "dark"; if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><span class="logo">✎</span>Ders Anlatıcı</div>
+  <div class="brand"><span class="logo">✎</span><span class="brand-ad">Ders Anlatıcı</span></div>
   <select id="courseSelect" title="Ders"></select>
-  <button id="newCourseBtn" class="ghost" title="Yeni ders">+ Ders</button>
-  <button id="curriculumBtn" class="ghost" title="Bölüm müfredatından dersleri ekle">📚 Müfredat</button>
-  <label class="ghost file-label" id="autoAddBtn" title="Notu (PDF/fotoğraf) ya da ders paketini ekle: hangi derse ait olduğunu kendisi bulur">📥 Not ekle
-    <input id="autoInput" type="file" accept="application/pdf,image/*,.json,application/json" multiple hidden>
-  </label>
+  <button id="newCourseBtn" class="ghost" title="Yeni ders">+<span class="lbl"> Ders</span></button>
   <div class="spacer"></div>
+  <button id="guncelleChip" class="ghost small hidden" title="Yeni sürüm var: güncelle ve yeniden başlat">⬆<span class="lbl"> Güncelleme</span></button>
   <button id="yerelChip" class="ghost small hidden" title="Yerel yapay zeka kurulumu (Ayarlar)"></button>
-  <button id="convBtn" class="ghost" title="Mikrofon sürekli açık: konuşarak ders, istediğin an sözünü kes">🎧 Konuşmalı ders</button>
-  <span id="micMeter" class="mic-meter hidden"><i></i></span>
-  <button id="newSessionBtn" class="ghost" title="Yeni anlatım başlat">Yeni anlatım</button>
+  <span id="micMeter" class="mic-meter hidden" title="Mikrofon seviyesi"><i></i></span>
+  <button id="convBtn" class="ghost" title="Mikrofon sürekli açık: konuşarak ders, istediğin an sözünü kes">🎧<span class="lbl"> Konuşmalı ders</span></button>
+  <button id="walkBtn" class="ghost" title="Yürürken ders: ekransız, yalnızca sesle">🚶<span class="lbl"> Yürürken</span></button>
+  <button id="focusBtn" class="ghost" title="Odak modu: tahta büyür, 25 dk pomodoro (Esc ile çık)">🎯<span class="lbl"> Odak</span></button>
   <button id="themeBtn" class="ghost" title="Tema: otomatik / açık / koyu">🌓</button>
-  <button id="phoneBtn" class="ghost" title="Telefondan kullan">📱</button>
-  <button id="settingsBtn" class="ghost" title="Ayarlar">⚙ Ayarlar</button>
+  <button id="settingsBtn" class="ghost" title="Ayarlar">⚙<span class="lbl"> Ayarlar</span></button>
+  <div class="more-wrap">
+    <button id="moreBtn" class="ghost" title="Diğer işlemler" aria-haspopup="true" aria-expanded="false">⋯</button>
+    <div id="moreMenu" class="more-menu hidden" role="menu">
+      <label class="ghost file-label" id="autoAddBtn" title="Notu (PDF/fotoğraf) ya da ders paketini ekle: hangi derse ait olduğunu kendisi bulur">📥 Not ekle
+        <input id="autoInput" type="file" accept="application/pdf,image/*,.json,application/json" multiple hidden>
+      </label>
+      <button type="button" class="ghost dar-menu" data-tikla="walkBtn">🚶 Yürürken ders</button>
+      <button type="button" class="ghost dar-menu" data-tikla="focusBtn">🎯 Odak modu</button>
+      <button type="button" class="ghost dar-menu" data-tikla="themeBtn">🌓 Tema değiştir</button>
+      <button id="curriculumBtn" class="ghost" title="Bölüm müfredatından dersleri ekle">📚 Müfredat</button>
+      <button id="newSessionBtn" class="ghost" title="Yeni anlatım başlat">✨ Yeni anlatım</button>
+      <button id="phoneBtn" class="ghost" title="Telefondan kullan">📱 Telefondan kullan</button>
+    </div>
+  </div>
 </header>
 
 <main class="layout">
@@ -60,21 +71,47 @@
       <span id="pageInfo" class="page-info"></span>
       <button id="prevPageBtn" class="ghost small" title="Önceki tahta sayfası">◀</button>
       <button id="nextPageBtn" class="ghost small" title="Sonraki tahta sayfası">▶</button>
+      <button id="drawBtn" class="ghost small" title="Tahtaya yaz: çözümünü çiz, hocaya göster">✏️</button>
       <button id="exportBtn" class="ghost small" title="Tahtayı PDF olarak indir">PDF</button>
       <button id="fullBtn" class="ghost small" title="Tam ekran (F)">⛶</button>
     </div>
   </section>
 
   <aside class="side">
-    <nav class="tabs">
-      <button data-tab="chat" class="active">Sohbet</button>
-      <button data-tab="notes">Notlar</button>
-      <button data-tab="lecture">Ders anlat</button>
-      <button data-tab="quiz">Sınav</button>
-      <button data-tab="plan">Takvim</button>
-      <button data-tab="library">Kütüphane</button>
-      <button data-tab="records">Kayıtlar</button>
+    <div id="sheetHandle" class="sheet-handle" title="Paneli sürükle ya da dokun" role="button" aria-label="Paneli aç / kapat"><i></i></div>
+    <nav class="tabs top-tabs" id="topTabs">
+      <button data-top="home" class="active" title="Ana sayfa">🏠<span class="lbl"> Ana sayfa</span></button>
+      <button data-top="ders">Ders</button>
+      <button data-top="calis">Çalış</button>
+      <button data-top="kaynak">Kaynaklar</button>
+      <button data-top="plan">Plan</button>
     </nav>
+    <nav class="subtabs hidden" id="subTabs" aria-label="Alt bölümler"></nav>
+
+
+    <!-- ANA SAYFA -->
+    <div class="tab-panel active" id="tab-home">
+      <div class="home">
+        <div class="home-hero">
+          <div><h2 id="homeHi">Merhaba</h2><p id="homeDate" class="muted"></p></div>
+        </div>
+        <button id="homeDevam" class="hcard devam" type="button"><span class="h-ic">▶</span><span class="h-t"><b>Kaldığın yerden devam</b><small class="muted">Yükleniyor…</small></span></button>
+        <div class="home-quick" id="homeQuick">
+          <button type="button" data-q="not">📥<span>Not ekle</span></button>
+          <button type="button" data-q="konus">🎧<span>Konuşmalı ders</span></button>
+          <button type="button" data-q="yuru">🚶<span>Yürürken ders</span></button>
+          <button type="button" data-q="odak">🎯<span>Odak modu</span></button>
+        </div>
+        <div class="home-grid">
+          <section class="hcard"><h4>📅 Bugünkü görevler</h4><div id="homeBugun" class="today-box"><p class="muted">Yükleniyor…</p></div></section>
+          <section class="hcard"><h4>⏳ Yaklaşan sınavlar</h4><div id="homeSinav" class="muted small">Yükleniyor…</div></section>
+          <section class="hcard hidden" id="homeKavramKart"><h4>💡 Günün kavramı</h4><div id="homeKavram"></div></section>
+          <section class="hcard hidden" id="homeBultenKart"><h4>📰 Bülten</h4><div id="homeBulten"></div></section>
+          <section class="hcard hidden" id="homeCalisKart"><h4>🧠 Çalış özeti</h4><div id="homeCalis"></div>
+            <div class="row"><button type="button" class="ghost small" data-git="kartlar">🃏 Kartlar</button><button type="button" class="ghost small" data-git="hatalar">⚠ Hatalarım</button></div></section>
+        </div>
+      </div>
+    </div>
 
     <!-- SOHBET -->
     <div class="tab-panel active" id="tab-chat">
@@ -168,6 +205,17 @@
       <details id="konuBox" class="profile-box hidden"><summary>📗 Sınav odaklı konu anlatımı</summary><div class="konu-md"></div></details>
       <div id="denemeBox" class="profile-box hidden"><b>📝 Deneme sınavları (hocanın formatında)</b> <span id="denemeBtns"></span></div>
       <div id="quizArea"></div>
+
+      <h4>Zayıf konuların</h4>
+      <ul id="weakList" class="weak-list"><li class="muted">Henüz kayıt yok.</li></ul>
+    </div>
+
+
+    <!-- KARTLAR / HATALAR / SİMÜLASYON / ALIŞTIRMA / PROJE (modüller doldurur) -->
+    <div class="tab-panel" id="tab-kartlar"><div id="calisKartlar" class="mod-kap"></div></div>
+    <div class="tab-panel" id="tab-hatalar"><div id="calisHatalar" class="mod-kap"></div></div>
+    <div class="tab-panel" id="tab-sim"><div id="calisSimulasyon" class="mod-kap"></div></div>
+    <div class="tab-panel" id="tab-erp">
       <details id="erpBox" class="profile-box erp-box"><summary>🏭 ERP alıştırması (MRP net ihtiyaç tablosu)</summary>
         <div class="row">
           <label class="small">Seviye <select id="erpSeviye"><option value="1">2 seviye</option><option value="2" selected>3 seviye</option></select></label>
@@ -175,8 +223,11 @@
         </div>
         <div id="erpAlan" class="muted small">Bir senaryo üret, net ihtiyaç tablosunu doldur; hesap aracı kontrol eder.</div>
       </details>
-      <h4>Zayıf konuların</h4>
-      <ul id="weakList" class="weak-list"><li class="muted">Henüz kayıt yok.</li></ul>
+      <div id="calisAlani" class="mod-kap"></div>
+    </div>
+    <div class="tab-panel" id="tab-proje">
+      <h4 class="mod-h">🎓 Bitirme projesi</h4><div id="guncelBitirme" class="mod-kap"></div>
+      <h4 class="mod-h">🌍 Günlük hayattan EM</h4><div id="guncelGunluk" class="mod-kap"></div>
     </div>
 
     <!-- TAKVİM -->
@@ -285,6 +336,10 @@
           </select>
         </label>
         <p id="llmInfo" class="muted small"></p>
+        <fieldset class="yerel"><legend>⬆ Güncellemeler</legend>
+          <div id="guncelleDurum" class="muted small">Denetleniyor…</div>
+          <div class="row"><button id="guncelleBtn" type="button" class="primary small hidden">Güncelle ve yeniden başlat</button></div>
+        </fieldset>
       </section>
       <section class="ayar-bolum" data-ayar="ses">
         <h4>🔊 Ses ve konuşma</h4>
@@ -353,6 +408,8 @@
       <section class="ayar-bolum" data-ayar="hoca">
         <h4>🧑‍🏫 Hoca ve görünüm</h4>
         <label class="check"><input id="set3d" type="checkbox"> 3B sınıf ve hoca (kapalıysa 2B çizim; eski bilgisayarda kapat)</label>
+        <label class="check"><input id="setSinifSes" type="checkbox"> 🔔 Sınıf sesleri (tebeşir, silgi, adım sesi; yalnızca hocayla ilgili)</label>
+        <label>Sınıf sesi düzeyi <input id="setSinifSesVol" type="range" min="0" max="1" step="0.05" value="0.35"></label>
         <div class="row">
           <label class="ghost small file-label" title="Tripo vb. ile yapılmış, iskeletli (rig) GLB modeli">🧑‍🏫 Hoca modeli (GLB) yükle
             <input id="glbInput" type="file" accept=".glb,model/gltf-binary" hidden></label>
@@ -398,13 +455,38 @@
   </form>
 </dialog>
 
+<div id="tahtaMenu" class="tahta-menu hidden" role="menu"></div>
+
+<div id="odakHalka" class="odak-halka hidden" title="Pomodoro: dokun = duraklat / sürdür">
+  <svg viewBox="0 0 44 44"><circle class="r0" cx="22" cy="22" r="19"/><circle class="r1" cx="22" cy="22" r="19" pathLength="100"/></svg>
+  <span id="odakSure">25:00</span><small id="odakFaz">odak</small>
+</div>
+<button id="odakCik" class="odak-cik hidden" title="Odak modundan çık (Esc)">✕ Odaktan çık</button>
+<div id="odakMola" class="odak-mola hidden"></div>
+
+<div id="yuruyus" class="yuruyus hidden" role="dialog" aria-label="Yürürken ders">
+  <button id="yuruBitir" class="yuru-bitir" type="button">✕ Bitir</button>
+  <div class="yuru-orta">
+    <div id="yuruDurum" class="yuru-durum">Hazırlanıyor…</div>
+    <div id="yuruAlt" class="yuru-alt"></div>
+  </div>
+  <div class="yuru-dugmeler">
+    <button id="yuruOynat" type="button">⏸<span>Durdur</span></button>
+    <button id="yuruSor" type="button">🎤<span>Soru sor</span></button>
+  </div>
+</div>
+
 <div id="toast" class="toast hidden"></div>
 
+<script src="/static/sesler.js"></script>
 <script src="/static/board.js"></script>
 <script src="/static/teacher.js"></script>
 <script src="/static/conversation.js"></script>
 <script src="/static/player.js"></script>
+<script src="/static/calis.js"></script>
+<script src="/static/guncel.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/arayuz.js"></script>
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});</script>
 </body>
 </html>
