@@ -236,7 +236,7 @@ export async function loadGlbRig(url, { flip = false } = {}) {
       case "sag": R = { x: -0.26, y: -0.1 + nb, z: 0.3 }; L = { x: 0.1, y: -0.52, z: 0.08 }; break;
       case "sol": L = { x: 0.26, y: -0.1 + nb, z: 0.3 }; R = { x: -0.1, y: -0.52, z: 0.08 }; break;
       case "isaret": isr = 1; R = { x: -0.2, y: -0.15, z: 0.3 }; break;
-      default: L = { x: 0.12, y: -0.5 + nb * 0.5, z: 0.1 }; R = { x: -0.12, y: -0.5 - nb * 0.5, z: 0.1 };
+      default: L = { x: sol.x, y: sol.y + (konusuyor ? nb * 0.5 : 0), z: sol.z }; R = { x: sag.x, y: sag.y - (konusuyor ? nb * 0.5 : 0), z: sag.z };
     }
     for (const [k, h] of [["L", L], ["R", R]]) {
       C.el[k].x = dmp(C.el[k].x, h.x, 5); C.el[k].y = dmp(C.el[k].y, h.y, 5); C.el[k].z = dmp(C.el[k].z, h.z, 5);
@@ -360,14 +360,16 @@ export async function loadGlbRig(url, { flip = false } = {}) {
         const chin = headObj.getWorldPosition(new THREE.Vector3()).add(rootDir(-0.02, -0.13, 0.2));
         kol("R", chin, rootDir(-0.2, -1, 0.45), 0.25);
         kol("L", relaxTarget("L", 0, 0), rootDir(0, -0.3, -1), 0.15);
-      } else if (konusuyor || G.jestVar || debug.zorla) {
+      } else if ((konusuyor || G.jestVar || debug.zorla) && !p.walking) {
         // Açıklama jestleri: eller kök uzayında yumuşakça (damping) hedefe gider, hedef her an fizik sınırından geçer
         for (const side of ["L", "R"]) {
           const o = G.el[side];
           const hedef = shoulderPos(side).add(rootDir(o.x, o.y, o.z));
           if (G.isaret && side === "R" && p.pointAt) {  // tahtadaki son öğeyi işaret et (kol uzanır, temas yok)
             const yon = p.pointAt.clone().sub(shoulderPos("R")); yon.y *= 0.6; yon.normalize();
-            hedef.copy(shoulderPos("R")).addScaledVector(yon, 0.5 * G.isaret);
+            const om = shoulderPos("R");
+            hedef.copy(om).addScaledVector(yon, 0.35 * G.isaret);
+            hedef.z = Math.max(hedef.z, p.pointAt.z + 0.2, om.z - 0.08);   // kamera yönündeyken kol omzun arkasına bükülmesin
             hedef.lerp(shoulderPos(side).add(rootDir(o.x, o.y, o.z)), 1 - G.isaret);
           }
           kol(side, hedef, rootDir(side === "L" ? 0.25 : -0.25, -0.3, -1), 0.2);

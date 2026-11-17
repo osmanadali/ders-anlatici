@@ -60,6 +60,7 @@ def test_chatterbox_hatasi_hatirlanir(monkeypatch):
     monkeypatch.setattr(voice, "_edge_tts", edge)
     asil = voice.load_settings
     monkeypatch.setattr(voice, "load_settings", lambda: {**asil(), "tts_provider": "chatterbox"})
+    gercek = getattr(voice, "real_speak", voice.speak)  # testlerde speak sahteyle değiştirilmiş olabilir
     for _ in range(3):
-        assert asyncio.run(voice.speak("merhaba")) == b"edge"
+        assert asyncio.run(gercek("merhaba")) == b"edge"
     assert len(cagri) == 1  # ilk hatadan sonra her adımda modeli yeniden yüklemeye çalışmaz

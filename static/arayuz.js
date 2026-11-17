@@ -328,6 +328,7 @@
       }
       if (!player.busy && !S.streamOpen) {
         const hi = `Yürüyüşe çıkıyoruz. ${S.course ? S.course.name + " dersinden" : "Bir konudan"} başlayalım mı? Ne anlatmamı istersin?`;
+        C.dropEmptyBubble?.(); S.tutorBubble = C.addMsg?.("tutor", "") || null;
         player.enqueue({ say: hi, board: [], audio: S.settings?.tts_enabled === false ? null : "/api/tts?text=" + encodeURIComponent(hi) });
       }
     },

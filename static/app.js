@@ -180,7 +180,6 @@
   }
 
   // ================================================================ anlatım isteği (SSE akışı)
-  const YURUYUS_NOTU = "(Yürürken dinliyorum; ekrana bakmıyorum, görsel ifadeler kullanma, formülleri sözle oku.)";
   async function ask({ text = "", mode = "chat", doc_id = "", page = 0, section = null, files = [], label = "" }) {
     teacher.unlock();
     let interrupted = "";
@@ -204,10 +203,11 @@
     if (interrupted) fd.append("interrupted", interrupted);
     if (S.conv) fd.append("style", "konusma");   // yürürken ders de bu üslubu kullanır (kısa, sözlü)
     S.adimSayisi = 0;
-    if (S.walk) text = YURUYUS_NOTU + " " + text, fd.set("text", text);
+    ozetTemizle();
+    if (S.walk) fd.append("walk", "1");   // talimatı sunucu yalnızca modele ekler
     files.forEach((f) => fd.append("files", f, f.name));
 
-    const shown = label || (S.walk ? text.replace(YURUYUS_NOTU + " ", "") : text) || (doc_id ? `Sayfa ${page}` : "");
+    const shown = label || text || (doc_id ? `Sayfa ${page}` : "");
     addMsg("user", shown + (ctx && mode === "chat" ? `  (📄 ${ctx.label})` : ""), files.map((f) => f.name));
     dropEmptyBubble();
     S.tutorBubble = addMsg("tutor", "");
@@ -247,6 +247,7 @@
           ? "Sunucuya ulaşılamadı. Siyah komut penceresi kapanmış olabilir: Ders Anlatici.bat ile yeniden aç. Sorun sürerse ders-anlatici/veri/sunucu.log dosyasını gönder."
           : "Hata: " + e.message);
         $("#caption").textContent = "";
+        if (S.walk) teacherStatus(offline ? "Sunucuya ulaşılamadı." : "Hata: " + e.message);
       }
     } finally {
       if (S.stream === ctrl) {
@@ -257,27 +258,52 @@
     }
   }
 
-  // Ders sonrası özet kartı: en az 3 adım anlatıldıysa sohbetin altına kapsayıcı koyup Calis modülüne çizdir
-  function ozetKartiKoy() {
-    if (!window.Calis?.ozetKarti || (S.adimSayisi || 0) < 3 || !S.sessionId) return;
+  // Özet kartı: her cevapta kendiliğinden değil, küçük düğmeyle istenir (yerel modelde büyük çağrı).
+  // Ders anlat modunda son bölüm bitince bir kez kendiliğinden istenir.
+  function ozetTemizle() {
+    try { S.ozetCtrl?.abort(); } catch {}
+    S.ozetCtrl = null;
+    document.querySelectorAll(".ozet-kart-kap, .ozet-kart-dugme").forEach((e) => e.remove());
+  }
+  function ozetIste(btn) {
+    if (!window.Calis?.ozetKarti || !S.sessionId) return;
+    try { S.ozetCtrl?.abort(); } catch {}
     document.querySelectorAll(".ozet-kart-kap").forEach((e) => e.remove());
+    const ac = new AbortController();
+    S.ozetCtrl = ac;
     const el = document.createElement("div");
     el.className = "ozet-kart-kap";
-    $("#chatLog").appendChild(el);
+    if (btn) { btn.after(el); btn.remove(); } else $("#chatLog").appendChild(el);
     scrollChat();
-    try { Promise.resolve(window.Calis.ozetKarti(el, ctx)).catch(() => {}).then(() => { if (!el.childNodes.length) el.remove(); else scrollChat(); }); }
-    catch (e) { console.warn("özet kartı", e); el.remove(); }
+    try {
+      Promise.resolve(window.Calis.ozetKarti(el, { ...ctx, signal: ac.signal })).catch(() => {}).then(() => {
+        if (ac.signal.aborted) return;
+        if (!el.childNodes.length) el.remove(); else scrollChat();
+      });
+    } catch (e) { console.warn("özet kartı", e); el.remove(); }
+  }
+  function ozetDugmesiKoy() {
+    if (!window.Calis?.ozetKarti || (S.adimSayisi || 0) < 3 || !S.sessionId) return;
+    document.querySelectorAll(".ozet-kart-kap, .ozet-kart-dugme").forEach((e) => e.remove());
+    const son = S.lectureActive && S.plan && S.lectureIdx === S.plan.sections.length - 1;
+    if (son && S.ozetOtoPlan !== S.plan) { S.ozetOtoPlan = S.plan; ozetIste(null); return; }
+    const b = document.createElement("button");
+    b.className = "ghost small ozet-kart-dugme";
+    b.textContent = "📝 Özet kartı";
+    b.onclick = () => ozetIste(b);
+    $("#chatLog").appendChild(b);
+    scrollChat();
   }
 
   function handleEvent(ev) {
     switch (ev.type) {
       case "session": S.sessionId = ev.id; S.turSira = ev.sira; break;
-      case "done": addFeedbackBar(S.tutorBubble, S.sessionId, S.turSira); ozetKartiKoy(); break;
+      case "done": addFeedbackBar(S.tutorBubble, S.sessionId, S.turSira); ozetDugmesiKoy(); break;
       case "step": if (!ev.filler) S.adimSayisi = (S.adimSayisi || 0) + 1; player.enqueue(ev); break;
       case "memory": toast(`Not aldım: “${ev.topic}” konusunu tekrar edeceğiz.`); break;
       case "notice": toast(ev.message); break;
       case "hesap": {
-        if (window.Calis?.indirmeDugmeleri) {  // sonucun altına indirme düğmeleri
+        if (window.Calis?.indirmeDugmeleri && ev.girdi && typeof ev.girdi === "object") {  // sonucun altına indirme düğmeleri
           try { const d = window.Calis.indirmeDugmeleri(ev.arac, ev.girdi, ctx); if (d) setTimeout(() => { (S.tutorBubble || $("#chatLog")).after?.(d); scrollChat(); }, 0); } catch (e) { console.warn(e); }
         }  // hesap aracı çalıştı: sohbette küçük rozet
         const rz = document.createElement("div");
@@ -1556,6 +1582,7 @@
     // Pencere hemen açılsın; sunucu meşgulse (model yükleniyor, kitap dizinleniyor) son bilinen ayarlarla dolsun
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     if (!$("#settingsDlg").open) $("#settingsDlg").showModal();
+    guncelleDenetle();
     try {
       await Promise.race([loadSettings(), new Promise((_, rej) => setTimeout(() => rej(new Error("zaman aşımı")), 5000))]);
     } catch { toast("Sunucu şu an meşgul; son bilinen ayarlar gösteriliyor.", 5000); }
@@ -1769,24 +1796,26 @@
   // ================================================================ başlat
   loadSettings().catch(() => {});
   window.DersCore = { S, $, api, postJSON, toast, ask, ctx, player, board, switchTab, openRecord, taskEl, localDate, goreli,
-    toggleConversation, get teacher() { return teacher; }, get teacher3d() { return teacher3d; }, localGet, localSet, scrollChat, loadPlanTab };
+    toggleConversation, get teacher() { return teacher; }, get teacher3d() { return teacher3d; }, localGet, localSet, scrollChat, loadPlanTab, addMsg, dropEmptyBubble };
   // Masaüstü uygulaması: pencere açık olduğu sürece sunucuya "buradayım" de (kapanınca sunucu kendini kapatır)
   const ping = () => fetch("/api/ping", { method: "POST" }).catch(() => {});
   ping(); setInterval(ping, 20000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) ping(); });
   // Güncelleme denetimi (Ayarlar > Yapay zeka + üst çubuk hapı)
+  let guncelleSoru = "";
   async function guncelleDenetle() {
     const d = $("#guncelleDurum");
     try {
       const g = await api("/api/guncelle/durum");
       $("#guncelleChip").classList.toggle("hidden", !g.yeni);
       $("#guncelleBtn").classList.toggle("hidden", !g.yeni);
-      d.textContent = g.yeni ? "Yeni sürüm: " + (g.mesaj || "") : (g.baslatici === false ? "Güncelleme bu kurulumda kullanılamıyor." : "Güncelsin.");
+      guncelleSoru = g.soru || (g.yeni ? `Yeni sürüm: ${g.mesaj || ""}. Şimdi güncelleyip yeniden başlatayım mı? (Sürmekte olan anlatım kesilir)` : "");
+      d.textContent = g.hata ? "Güncelleme denetlenemedi (internet yok olabilir)." : g.yeni ? "Yeni sürüm: " + (g.mesaj || "") : (g.baslatici === false ? "Güncelleme bu kurulumda kullanılamıyor." : "Güncelsin.");
       $("#guncelleBtn").disabled = !!g.mesgul;
     } catch { d.textContent = "Güncelleme durumu alınamadı."; }
   }
   async function guncelleYap() {
-    if (!confirm("Güncellenip yeniden başlatılsın mı? Birkaç dakika sürebilir.")) return;
+    if (!confirm(guncelleSoru || "Güncellenip yeniden başlatılsın mı? Birkaç dakika sürebilir.")) return;
     try { await postJSON("/api/guncelle/yeniden-baslat", {}); } catch (e) { if (!baglantiYok) { toast("Güncellenemedi: " + e.message); return; } }
     baglantiKoptu();
   }
