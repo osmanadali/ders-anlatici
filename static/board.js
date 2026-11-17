@@ -71,6 +71,7 @@
 
     // ---------------- sayfalar
     clear() {
+      if (this.pages.some((p) => p.querySelector(".b-item"))) window.Sesler?.sil();
       this.root.innerHTML = "";
       this.pages = [];
       this.newPage(true);
@@ -125,10 +126,10 @@
       const done = a.finished.catch(() => {}).finally(() => this.active.delete(a));
       return done;
     }
-    pause() { this.paused = true; this.active.forEach((a) => a.pause()); }
+    pause() { this.paused = true; this.active.forEach((a) => a.pause()); window.Sesler?.yazDur(); }
     resume() { this.paused = false; this.active.forEach((a) => a.play()); }
     setRate(r) { this.rate = r; this.active.forEach((a) => a.updatePlaybackRate(r)); }
-    finishAll() { this.fast = true; this.active.forEach((a) => a.finish()); }
+    finishAll() { this.fast = true; this.active.forEach((a) => a.finish()); window.Sesler?.yazDur(); }
 
     // Bir adımın tüm işlemlerini sırayla, toplam ~totalMs içinde canlandırır.
     async render(ops, totalMs) {
@@ -158,7 +159,7 @@
         case "plot": return this._plot(op, d);
         case "diagram": return this._diagram(op, d);
         case "show_page": return this._showPage(op, d);
-        case "newpage": this.newPage(false); return;
+        case "newpage": if (!this.fast) window.Sesler?.sil(); this.newPage(false); return;
       }
     }
 
@@ -170,6 +171,7 @@
       const pen = this.page._pen;
       if (d > 0) {
         pen.style.opacity = 1;
+        window.Sesler?.yaz(d / (this.rate || 1));
         const x0 = el.offsetLeft, y = el.offsetTop + el.offsetHeight * 0.75;
         this._anim(pen, [{ left: x0 + "px", top: y + "px" }, { left: x0 + el.offsetWidth + "px", top: y + "px" }], { duration: d });
       }
@@ -207,6 +209,7 @@
       }
       svg.appendChild(path);
       target.appendChild(svg);
+      if (d > 0) window.Sesler?.isaret();
       await this._drawPaths([path], d);
     }
 
@@ -287,6 +290,7 @@
       });
       svg.querySelectorAll("text").forEach((t) => (t.style.opacity = 0));
       // Önce eksenler (%30), sonra eğriler (%55), sonra noktalar
+      if (d > 0) window.Sesler?.yaz(d / (this.rate || 1));
       const tAxes = d * 0.3, tCurves = d * 0.55, tPts = d * 0.15;
       await this._drawPaths(axes, tAxes, fades.filter((f) => f[1] <= 0.3).map(([e]) => [e, 0.6]));
       await this._drawPaths(curves, tCurves, fades.filter((f) => f[1] > 0.3 && f[1] <= 0.9).map(([e]) => [e, 0.9]));
@@ -326,6 +330,7 @@
           }
         }
       });
+      if (d > 0) window.Sesler?.yaz(d / (this.rate || 1));
       await this._drawPaths(paths, d, fades);
     }
 
