@@ -1408,3 +1408,6 @@ async def favicon():
 from . import guncel as _guncel_modulu  # noqa: E402
 
 app.include_router(_guncel_modulu.router)
+from . import calis as _calis  # noqa: E402
+
+app.include_router(_calis.router)  # Çalış sekmesi (hatalar, kartlar, simülasyon, hesap alanı, özet kartı)
