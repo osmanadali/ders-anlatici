@@ -54,7 +54,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ---------- üst çubuk: şeffaf, kompakt */
 .topbar { background: transparent; border-bottom: 0; padding: 12px 18px 4px; gap: 6px; }
-.brand { font-family: "Plus Jakarta Sans", Inter, sans-serif; font-size: 19px; font-weight: 800; letter-spacing: -0.02em;
+.brand { white-space: nowrap; flex-shrink: 0; font-family: "Plus Jakarta Sans", Inter, sans-serif; font-size: 19px; font-weight: 800; letter-spacing: -0.02em;
   color: var(--text); display: flex; align-items: center; gap: 10px; margin-right: 10px; }
 .brand .logo { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 11px;
   background: var(--grad); color: #fff; font-size: 17px; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent) 35%, transparent); }

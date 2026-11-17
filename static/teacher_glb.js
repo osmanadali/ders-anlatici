@@ -101,7 +101,7 @@ function twoBone(a, b, c, target, pole, k = 0.35, keep = null) {
   let elbow = A.clone().addScaledVector(dir, la * cosA).addScaledVector(pv, la * Math.sqrt(1 - cosA * cosA));
   if (keep) {  // dirsek ve ön kol gövdeye girmesin: dışarı it, kol uzunluğunu koru
     const H = A.clone().addScaledVector(dir, d);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 6; i++) {
       elbow = keep(elbow);
       elbow = A.clone().add(elbow.sub(A).setLength(la));
       // ön kolun ortası (ve el tarafı) gövdedeyse dirseği o yönde dışarı taşı
@@ -324,15 +324,33 @@ export async function loadGlbRig(url, { flip = false } = {}) {
         const k = 1 / e;  // elipsin yüzeyine aynı yönde ölçekle
         return pt.clone().addScaledVector(ex, fx * (k - 1)).addScaledVector(ez, fz * (k - 1));
       };
+      // Kolun GERÇEK konumundaki ihlal: el, dirsek ve ön kol (3 nokta) gövdede mi, tahtanın arkasında mı (m)
+      const ihlal = (L) => {
+        const E = L.fore.getWorldPosition(new THREE.Vector3()), H = L.hand.getWorldPosition(new THREE.Vector3());
+        let m = 0, z = 9;
+        for (const f of [0, 0.33, 0.66, 1]) {
+          const q = E.clone().lerp(H, f);
+          m = Math.max(m, disari0(q.clone()).distanceTo(q), 0.045 - q.z);
+          z = Math.min(z, q.z);
+        }
+        return { m, z };
+      };
       const kol = (side, target, pole, k) => {
         const L = B[side];
-        twoBone(L.upper, L.fore, L.hand, disari(target), pole, k, disari);
-        // tanılama: el, dirsek ve ön kol ortasının gövde kapsülüne ne kadar girdiği (m) ve tahta düzlemi
-        const E = L.fore.getWorldPosition(new THREE.Vector3()), H = L.hand.getWorldPosition(new THREE.Vector3());
-        const O = E.clone().lerp(H, 0.5);
-        const pen = Math.max(...[E, H, O].map((q) => disari0(q.clone()).distanceTo(q)));
-        debug.pen = Math.max(debug.pen || 0, pen); debug.minZ = Math.min(debug.minZ ?? 9, H.z, O.z);
-        debug.last = { side, pen, handZ: H.z };
+        const hedef = disari(target);
+        twoBone(L.upper, L.fore, L.hand, hedef, pole, k, disari);
+        // Yumuşatma (slerp) eski pozdan yeni poza giderken kol gövdeden ya da tahtadan geçebilir: geçiyorsa bu karede
+        // sınırlı çözüme doğrudan otur. Hâlâ geçiyorsa hedefi gövdeden biraz daha uzağa (öne) alıp yeniden çöz.
+        let v = ihlal(L);
+        for (let i = 0; i < 6 && v.m > 0.004; i++) {
+          // kol göğsün önünden çapraz geçiyorsa: hedefi kolun kendi tarafına ve biraz öne kaydır
+          if (i > 0) hedef.addScaledVector(rootDir(side === "L" ? 1 : -1, 0, 0), 0.05).addScaledVector(rootDir(0, 0, 1), 0.02);
+          twoBone(L.upper, L.fore, L.hand, disari(hedef), pole, 1, disari);
+          v = ihlal(L);
+        }
+        if (v.m > 0.01 && debug.kayit) debug.kayit.push({ side, m: +v.m.toFixed(3), z: +v.z.toFixed(3), reach: !!p.reachR, think: !!p.think });
+        debug.pen = Math.max(debug.pen || 0, v.m); debug.minZ = Math.min(debug.minZ ?? 9, v.z);
+        debug.last = { side, pen: v.m, handZ: v.z };
       };
       if (p.reachR) {
         kol("R", p.reachR, rootDir(0.3, -1, -0.5), 0.4);
