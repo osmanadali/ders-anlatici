@@ -272,7 +272,7 @@ def course_knowledge(course: dict | None, notes_text: str, full: bool) -> str:
 
 def build_system(
     course: dict | None, notes_text: str, full: bool, memory: str, level: str, conversation: bool = False,
-    kaynaklar: str = "", ogrenme: str = "", tarz: str = "anlat",
+    kaynaklar: str = "", ogrenme: str = "", tarz: str = "anlat", sohbet: bool = False,
 ) -> list[dict]:
     system: list[dict] = [{"type": "text", "text": prompts.TUTOR_SYSTEM}]
     knowledge = course_knowledge(course, notes_text, full)
@@ -291,6 +291,8 @@ def build_system(
         extra += "\n\n" + ogrenme
     if tarz == "sokratik":
         extra += "\n\n" + prompts.SOKRATIK
+    if sohbet:  # serbest sohbette: yeni konuda seviye yoklaması, yanlışta hata türü teşhisi
+        extra += "\n\n" + prompts.ON_BILGI_YOKLAMA + "\n\n" + prompts.HATA_ANALIZI
     system.append({"type": "text", "text": extra})
     return system
 

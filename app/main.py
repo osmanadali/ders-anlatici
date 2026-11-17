@@ -1042,6 +1042,7 @@ async def ask(
     system = llm.build_system(
         course, nt.text, nt.full, store.memory_summary(course_id or None), settings.get("level", "normal"),
         conversation=(style == "konusma"), kaynaklar=kaynak_txt, ogrenme=ogrenme_txt, tarz=tarz,
+        sohbet=(mode == "chat"),
     )
     messages = session["messages"] + [user_msg]
     sid = session["id"]
