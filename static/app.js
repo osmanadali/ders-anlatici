@@ -1565,6 +1565,11 @@
     $("#setTtsModel").value = st.tts_model;
     $("#setLevel").value = st.level;
     $("#setProvider").value = st.tts_provider || "edge";
+    if ($("#setEdgeRate")) {
+      const r = st.edge_rate || "+4%";
+      if (![...$("#setEdgeRate").options].some((o) => o.value === r)) $("#setEdgeRate").add(new Option(r, r));
+      $("#setEdgeRate").value = r;
+    }
     $("#setDeep").value = st.deep_solve || "auto";
     api("/api/llm-options").then((o) => {
       $("#setLlm").value = st.llm_provider || "";
@@ -1682,6 +1687,7 @@
       gemini_model: $("#setGeminiModel").value,
       deep_solve: $("#setDeep").value,
       edge_voice: $("#setEdgeVoice").value || S.settings.edge_voice,
+      edge_rate: $("#setEdgeRate").value || S.settings.edge_rate || "+4%",
       stt_provider: $("#setStt").value,
       web_search: $("#setWeb").checked,
       otomatik_paket: $("#setOtoPaket").checked,

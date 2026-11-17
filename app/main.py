@@ -885,7 +885,8 @@ async def _cached_tts(text: str) -> FileResponse:
     s = load_settings()
     if s["tts_provider"] == "browser":
         raise HTTPException(409, "Tarayıcı sesi seçili")
-    vkey = {"edge": s["edge_voice"], "xtts": "xtts"}.get(s["tts_provider"], s["voice_id"] + s["tts_model"])
+    vkey = {"edge": f'{s["edge_voice"]}{s.get("edge_rate", "")}{s.get("edge_pitch", "")}', "xtts": "xtts",
+            "chatterbox": "chatterbox", "piper": "piper"}.get(s["tts_provider"], s["voice_id"] + s["tts_model"])
     key = hashlib.sha1(f"{s['tts_provider']}|{vkey}|{text}".encode()).hexdigest()
     path = TTS_CACHE / f"{key}.mp3"
     if not path.exists():

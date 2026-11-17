@@ -213,7 +213,7 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 #planFocus { width: 100%; margin: 6px 0; }
 
 .settings .prov { display: none; flex-direction: column; gap: 8px; }
-.settings[data-prov="elevenlabs"] .prov-elevenlabs, .settings[data-prov="edge"] .prov-edge, .settings[data-prov="xtts"] .prov-xtts { display: flex; }
+.settings[data-prov="elevenlabs"] .prov-elevenlabs, .settings[data-prov="edge"] .prov-edge, .settings[data-prov="xtts"] .prov-xtts, .settings[data-prov="chatterbox"] .prov-chatterbox { display: flex; }
 #recSample.rec { background: var(--danger); color: #fff; }
 
 .pv-text { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-top: 6px; white-space: pre-wrap; font-size: 13.5px; max-height: 60vh; overflow-y: auto; }

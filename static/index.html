@@ -347,6 +347,7 @@
           <select id="setProvider">
             <option value="edge">Microsoft Edge sesi: ÜCRETSİZ, hazır Türkçe ses (Emel / Ahmet)</option>
             <option value="xtts">Kendi sesim (yerel klon): ÜCRETSİZ, bilgisayarımda çalışır</option>
+            <option value="chatterbox">Doğal yerel ses (Chatterbox): ÜCRETSİZ, ekran kartında; ayrı kurulum gerekir</option>
             <option value="piper">İnternetsiz ses (Piper): ÜCRETSİZ, tamamen bilgisayarımda</option>
             <option value="browser">Tarayıcı sesi: ücretsiz, robotik</option>
             <option value="elevenlabs">ElevenLabs: ücretli, kredi harcar (isteğe bağlı)</option>
@@ -364,6 +365,19 @@
         </div>
         <div class="prov prov-edge">
           <label>Hazır ses <select id="setEdgeVoice"></select></label>
+          <label>Konuşma hızı
+            <select id="setEdgeRate">
+              <option value="-6%">Yavaş</option><option value="+0%">Normal</option>
+              <option value="+4%">Doğal (önerilen)</option><option value="+10%">Hızlı</option>
+            </select>
+          </label>
+        </div>
+        <div class="prov prov-chatterbox">
+          <p class="muted small">En doğal ses; bilgisayarında çalışır, internet istemez. Kurulum (bir kez): uygulama klasöründe
+            <code>.venv\Scripts\pip install -r requirements-ses.txt</code> (NVIDIA kart için önce
+            <code>.venv\Scripts\pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124</code>).
+            İlk kullanımda ~3 GB model iner. Kurulu değilse ya da hata olursa Edge sesiyle devam eder.
+            Kendi ses örneğin varsa (Kendi sesim) onunla konuşur.</p>
         </div>
         <div class="prov prov-xtts">
           <p class="muted small">Kendi sesinden 15-30 saniyelik temiz bir kayıt gerekir (sessiz oda, normal konuşma). Önerilen metni oku ya da hazır bir ses dosyası yükle.</p>
