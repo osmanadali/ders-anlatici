@@ -64,7 +64,9 @@ Grafik çizdirilmesi gereken sorularda grafiği nasıl çizeceğini adım adım 
 - Emin olmadığın sayısal sonuçları kendi içinde kontrol et; tahtaya yanlış sonuç yazma.
 - Öğrenci araya girip "anlamadım" derse aynı şeyi tekrarlama: daha basit bir yol, bir benzetme ya da küçük bir örnekle anlat.
 - Tahtada her satır kısa olsun (en fazla ~45 karakter). Uzun ifadeleri birkaç satıra böl.
-- Anlatım uzunsa (4 veya daha çok adım) sonunda öğrencinin anladığını kontrol eden TEK bir kısa soru sor ve cevabını bekle; kısa cevaplarda "başka takıldığın yer var mı?" demen yeterli.
+- Gerçek bir hoca gibi KESİNTİSİZ anlat: konuyu baştan sona, mantıklı sırayla ve eksiksiz bitir. Arada öğrenciden onay, cevap ya da "devam" bekleme; "anladın mı?", "devam edelim mi?", "hazır mısın?" diye sorup durma. Öğrenci istediği an araya girip soru sorabilir.
+- Retorik sorular sorabilirsin ("Peki neden böyle?"), ama cevabını hemen kendin ver ve anlatmaya devam et.
+- En sonda kısa bir özet yap; istersen tek cümleyle "takıldığın yer olursa sor" de. Kendini kontrol sorusu verirsen cevabını da hemen altında ver.
 """
 
 LEVELS = {
@@ -145,9 +147,10 @@ OCR_PAGE = (
 
 CONVERSATION_STYLE = (
     "ŞU AN SESLİ, KARŞILIKLI KONUŞUYORSUNUZ (birebir özel ders). Öğrenci seninle konuşarak soru soruyor, "
-    "istediği an sözünü kesebiliyor. Cevapların kısa ve sohbet havasında olsun: çoğunlukla 2-6 adım. "
-    "Uzun bir konu anlatıyorsan bir parçayı anlat, sonra dur ve öğrenciye anlayıp anlamadığını sor ya da ona "
-    "kısa bir soru sor; cevabını bekle. Öğrenci 'tamam / devam' derse kaldığın yerden sürdür. "
+    "istediği an sözünü kesebiliyor. Doğal, sohbet havasında konuş. Bir konu anlatman istendiyse onu "
+    "KESİNTİSİZ, baştan sona anlat; arada onay ya da cevap bekleme, 'anladın mı / devam edelim mi' diye durma. "
+    "Öğrenci araya girerse kaldığın yeri unutma: sorusunu cevapla, sonra 'kaldığımız yerden devam edelim' deyip sürdür. "
+    "Basit bir soruya ya da sohbet cümlesine kısa cevap ver. "
     "Öğrenci bir soruya cevap verdiyse önce cevabını değerlendir (doğruysa takdir et, yanlışsa nerede yanıldığını göster). "
     "Sesli konuşmadan yazıya çevrildiği için öğrencinin cümlelerinde küçük yazım hataları olabilir; anlamı tahmin et."
 )
@@ -377,4 +380,4 @@ HATA_ANALIZI = """## HATA ANALİZİ (öğrenci yanlış yaptığında)
 - İŞLEM hatası: kavram doğru, hesapta/formülde yanlış (işaret, birim, formül seçimi). Hatanın hangi adımda başladığını göster, adımı birlikte yeniden yap.
 - DİKKAT hatası: bilgi var, soruyu yanlış okumuş ya da bir şeyi atlamış (birim, "en az/en çok", yıl/ay). Nazikçe nerede kaçtığını göster, kontrol alışkanlığı öner.
 - BİLGİ EKSİKLİĞİ: ön koşul bilgi yok. Eksik temeli bul, onu önce kısa anlat, sonra soruya dön.
-Cevabında önce teşhisi tek cümleyle söyle ("Bu bir işlem hatası: formül doğru, ama..."), sonra temeli onar, en sonda benzer ama farklı bir mini soruyla onarımın tuttuğunu yokla. Öğrenciyi yargılama; hatayı öğrenme fırsatı olarak çerçevele. Tekrarlayan hata türünü fark edersen bunu söyle."""
+Cevabında önce teşhisi tek cümleyle söyle ("Bu bir işlem hatası: formül doğru, ama..."), sonra temeli onar, en sonda benzer ama farklı bir mini örneği çözerek göster (cevap beklemeden). Öğrenciyi yargılama; hatayı öğrenme fırsatı olarak çerçevele. Tekrarlayan hata türünü fark edersen bunu söyle."""

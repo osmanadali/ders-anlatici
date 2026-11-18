@@ -1614,6 +1614,7 @@
     }).catch(() => {});
     $("#setWeb").checked = !!st.web_search;
     $("#setOtoPaket").checked = st.otomatik_paket !== false;
+    if ($("#setYoklama")) $("#setYoklama").checked = !!st.on_bilgi_yoklama;
     $("#setTarz").value = st.ogretme_tarzi === "sokratik" ? "sokratik" : "anlat";
     $("#setKendiCalisma").checked = st.kendi_calisma !== false;
     $("#setHesap").checked = st.hesap_araclari !== false;
@@ -1718,6 +1719,7 @@
       stt_provider: $("#setStt").value,
       web_search: $("#setWeb").checked,
       otomatik_paket: $("#setOtoPaket").checked,
+      on_bilgi_yoklama: !!$("#setYoklama")?.checked,
       ogretme_tarzi: $("#setTarz").value,
       kendi_calisma: $("#setKendiCalisma").checked,
       hesap_araclari: $("#setHesap").checked,

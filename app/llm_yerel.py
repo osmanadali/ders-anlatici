@@ -28,10 +28,18 @@ CHARS_PER_TOKEN = 3.0  # Türkçe metinde kaba ortalama
 OUTPUT_RESERVE = 4096  # cevap için ayrılan token
 
 
-def system_text(system) -> str:
+def system_text(system, sabit: bool = False) -> str:
+    """sabit=True: yalnızca her soruda aynı kalan bloklar (Ollama önceki sorudan hesapladığını yeniden kullanır)."""
     if isinstance(system, str):
         return system
-    return "\n\n".join(b.get("text", "") for b in system or [])
+    return "\n\n".join(b.get("text", "") for b in system or [] if not (sabit and b.get("degisken")))
+
+
+def degisken_text(system) -> str:
+    """Soruya göre değişen bağlam (kütüphane alıntıları, hafıza, seçilen not parçaları): son soruya eklenir."""
+    if isinstance(system, str):
+        return ""
+    return "\n\n".join(b.get("text", "") for b in system or [] if b.get("degisken"))
 
 
 def _pdf_parts(b64: str) -> tuple[str, list[str]]:
@@ -107,7 +115,12 @@ def to_messages(system, messages: list[dict], ctx: int) -> list[dict]:
     # Eski turlardaki görüntüleri at (yalnızca son mesajınkiler gerekli; bellek ve hız için)
     for x in conv[:-1]:
         x.pop("images", None)
-    out = [{"role": "system", "content": sys_txt}] if sys_txt else []
+    # Hız: sistem talimatı ve önceki turlar her soruda AYNI kalırsa Ollama onları yeniden okumaz (önbellek).
+    # Soruya göre değişen bağlam bu yüzden sistem talimatına değil, yalnızca son soruya eklenir.
+    sabit, degisken = system_text(system, sabit=True), degisken_text(system)
+    if degisken and conv and conv[-1]["role"] == "user":
+        conv[-1] = {**conv[-1], "content": "<baglam>\n" + degisken + "\n</baglam>\n\n" + conv[-1]["content"]}
+    out = [{"role": "system", "content": sabit}] if sabit else []
     return out + conv
 
 

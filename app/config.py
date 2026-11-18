@@ -79,6 +79,7 @@ DEFAULTS = {
     "_ses_v2": False,  # bir kerelik ses geçişi yapıldı mı
     "_ses_v3": False,  # ikinci bir kerelik geçiş: örneksiz xtts/piper/browser → Edge Ahmet
     "edge_rate": "+4%",
+    "on_bilgi_yoklama": False,  # açıksa hoca yeni konuya başlamadan 1-2 kısa soruyla seviyeni yoklar (cevabı bekler)
     "edge_pitch": "-2Hz",
     "stt_provider": os.getenv("STT_PROVIDER", "whisper"),  # whisper (ücretsiz) | elevenlabs (ücretli, isteğe bağlı)
     "whisper_model": os.getenv("WHISPER_MODEL", "large-v3-turbo"),  # small = hızlı, large-v3-turbo = isabetli

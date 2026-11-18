@@ -254,6 +254,11 @@ async def start_server(binary: str) -> None:
     env.setdefault("OLLAMA_MODELS", str(klasor))
     env["OLLAMA_HOST"] = HOST.split("://", 1)[-1]
     env.setdefault("OLLAMA_KEEP_ALIVE", "30m")
+    # Hız ve bellek: flash attention + 8 bitlik bağlam önbelleği (aynı bağlamda yarı bellek → modelin daha çok
+    # katmanı ekran kartına sığar); sohbet modeli ile arama modeli aynı anda yüklü kalabilir.
+    env.setdefault("OLLAMA_FLASH_ATTENTION", "1")
+    env.setdefault("OLLAMA_KV_CACHE_TYPE", "q8_0")
+    env.setdefault("OLLAMA_MAX_LOADED_MODELS", "2")
     logf = open(DATA_DIR / "yerel-yz.log", "ab")
     _proc = subprocess.Popen([binary, "serve"], env=env, stdout=logf, stderr=subprocess.STDOUT,
                              stdin=subprocess.DEVNULL, creationflags=NO_WINDOW)

@@ -226,6 +226,6 @@ def test_sokratik_ayari_talimata_yansir(client):
 
 
 def test_kontrol_sorusu_talimati_ve_varsayilanlar():
-    assert "TEK bir kısa soru" in prompts.TUTOR_SYSTEM
+    assert "KESİNTİSİZ" in prompts.TUTOR_SYSTEM and "cevabını bekle" not in prompts.CONVERSATION_STYLE
     from app.config import DEFAULTS
     assert DEFAULTS["ogretme_tarzi"] == "anlat" and DEFAULTS["kendi_calisma"] is True

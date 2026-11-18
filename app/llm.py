@@ -276,24 +276,26 @@ def build_system(
 ) -> list[dict]:
     system: list[dict] = [{"type": "text", "text": prompts.TUTOR_SYSTEM}]
     knowledge = course_knowledge(course, notes_text, full)
-    if knowledge:
-        system.append({"type": "text", "text": knowledge, "cache_control": {"type": "ephemeral", "ttl": "1h"}})
+    if knowledge:  # notların tamamı sığdıysa her soruda aynıdır; sığmadıysa soruya göre seçilir (değişken)
+        system.append({"type": "text", "text": knowledge, "cache_control": {"type": "ephemeral", "ttl": "1h"},
+                       "degisken": not full})
     else:
         system[0]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
     if kaynaklar:  # kütüphaneden soruyla ilgili bölümler (her soruda değişir: önbelleğe alınmaz)
-        system.append({"type": "text", "text": prompts.kaynak_block(kaynaklar)})
+        system.append({"type": "text", "text": prompts.kaynak_block(kaynaklar), "degisken": True})
     extra = prompts.LEVELS.get(level, prompts.LEVELS["normal"])
     if conversation:
         extra += "\n\n" + prompts.CONVERSATION_STYLE
-    if memory:
-        extra += "\n\n" + memory
-    if ogrenme:  # geri bildirimden öğrenilenler, öğrenci tercihleri, doğrulanmış bilgi (kısa)
-        extra += "\n\n" + ogrenme
+    degisken = "\n\n".join(x for x in (memory, ogrenme) if x)  # hafıza ve öğrenilenler: sorudan soruya değişir
     if tarz == "sokratik":
         extra += "\n\n" + prompts.SOKRATIK
-    if sohbet:  # serbest sohbette: yeni konuda seviye yoklaması, yanlışta hata türü teşhisi
-        extra += "\n\n" + prompts.ON_BILGI_YOKLAMA + "\n\n" + prompts.HATA_ANALIZI
+    if sohbet:  # serbest sohbette: yanlışta hata türü teşhisi; seviye yoklaması yalnızca Ayarlar'dan açılırsa
+        extra += "\n\n" + prompts.HATA_ANALIZI
+        if load_settings().get("on_bilgi_yoklama", False):
+            extra += "\n\n" + prompts.ON_BILGI_YOKLAMA
     system.append({"type": "text", "text": extra})
+    if degisken:
+        system.append({"type": "text", "text": degisken, "degisken": True})
     return system
 
 

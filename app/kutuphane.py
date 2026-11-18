@@ -782,7 +782,7 @@ def _vektorler(cevap: dict) -> list[np.ndarray]:
 
 async def _gom(metinler: list[str]) -> list[np.ndarray]:
     async with httpx.AsyncClient(timeout=120) as c:
-        r = await c.post(f"{_host()}/api/embed", json={"model": gomme_modeli(), "input": metinler, "truncate": True,
+        r = await c.post(f"{_host()}/api/embed", json={"model": gomme_modeli(), "input": metinler, "truncate": True, "options": {"num_gpu": 0},
                                                        "keep_alive": "2m"})
         r.raise_for_status()
         v = _vektorler(r.json())
@@ -965,7 +965,7 @@ def _sorgu_vektoru(sorgu: str) -> np.ndarray | None:
         return None
     try:
         r = httpx.post(f"{_host()}/api/embed", json={"model": gomme_modeli(), "input": [SORGU_TALIMATI + sorgu[:2000]],
-                                                     "truncate": True, "keep_alive": "5m"}, timeout=15)
+                                                     "truncate": True, "options": {"num_gpu": 0}, "keep_alive": "5m"}, timeout=15)
         r.raise_for_status()
         v = _vektorler(r.json())
         return v[0] if v else None

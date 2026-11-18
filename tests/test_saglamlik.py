@@ -64,3 +64,18 @@ def test_chatterbox_hatasi_hatirlanir(monkeypatch):
     for _ in range(3):
         assert asyncio.run(gercek("merhaba")) == b"edge"
     assert len(cagri) == 1  # ilk hatadan sonra her adımda modeli yeniden yüklemeye çalışmaz
+
+
+def test_degisken_baglam_son_soruya_gider():
+    """Hız: sistem talimatı sorudan soruya aynı kalır (Ollama önbelleği), değişen bağlam son soruya eklenir."""
+    from app import llm, llm_yerel
+
+    def kur(kaynak, soru):
+        system = llm.build_system(None, "NOTLAR", True, "hafıza-" + kaynak, "normal", kaynaklar="kaynak-" + kaynak,
+                                  ogrenme="ogren-" + kaynak, sohbet=True)
+        return llm_yerel.to_messages(system, [{"role": "user", "content": [{"type": "text", "text": soru}]}], 16384)
+
+    a, b = kur("A", "ilk soru"), kur("B", "ikinci soru")
+    assert a[0]["role"] == "system" and a[0]["content"] == b[0]["content"]  # önbellek bozulmaz
+    assert "kaynak-A" not in a[0]["content"] and "hafıza-A" not in a[0]["content"]
+    assert a[-1]["content"].startswith("<baglam>") and "kaynak-A" in a[-1]["content"] and a[-1]["content"].endswith("ilk soru")

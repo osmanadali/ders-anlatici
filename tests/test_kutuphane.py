@@ -227,7 +227,8 @@ def test_ask_kutuphane_bosken_degismez(client, monkeypatch):
     assert "KAYNAK KİTAP" not in _sistem_metni()
     from app import config, store
 
-    beklenen = llm.build_system(None, "", False, store.memory_summary(None), config.load_settings().get("level", "normal"))
+    beklenen = llm.build_system(None, "", False, store.memory_summary(None), config.load_settings().get("level", "normal"),
+                                sohbet=True)
     sistem = fakes.CALLS[-1]["system"]  # (hafıza metni cevap sonrası değişebilir: yalnızca yapı karşılaştırılır)
     assert len(sistem) == len(beklenen) and sistem[:-1] == beklenen[:-1]
 
